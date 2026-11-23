@@ -89,6 +89,46 @@ app.get("/status", (req, res) => {
   res.json({ connected: isConnected, hasQR: !!latestQR });
 });
 
+app.get("/api/qr-json", async (req, res) => {
+  const key = req.headers["x-api-key"] || req.query.apiKey;
+  if (key !== API_KEY) {
+    return res.status(401).json({ error: "API Key inválida." });
+  }
+
+  if (isConnected) {
+    return res.json({ connected: true, qrDataUrl: null });
+  }
+
+  if (!latestQR) {
+    return res.json({ connected: false, qrDataUrl: null, waiting: true });
+  }
+
+  try {
+    const qrDataUrl = await QRCode.toDataURL(latestQR, { width: 320, margin: 2 });
+    return res.json({ connected: false, qrDataUrl });
+  } catch (err) {
+    return res.status(500).json({ error: "Falha ao gerar QR Code em base64." });
+  }
+});
+
+app.post("/api/disconnect", async (req, res) => {
+  const key = req.headers["x-api-key"];
+  if (key !== API_KEY) {
+    return res.status(401).json({ error: "API Key inválida." });
+  }
+
+  try {
+    if (sock) {
+      await sock.logout();
+    }
+    isConnected = false;
+    latestQR = null;
+    return res.json({ ok: true });
+  } catch (err) {
+    return res.status(500).json({ error: err.message || "Erro ao desconectar." });
+  }
+});
+
 app.get(["/", "/qr"], async (req, res) => {
   if (isConnected) {
     return res.send(`

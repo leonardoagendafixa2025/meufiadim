@@ -19,6 +19,11 @@ import {
   QrCode,
   ExternalLink,
   AlertCircle,
+  RefreshCw,
+  Smartphone,
+  CheckCircle2,
+  ShieldCheck,
+  Zap,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { formatBRL } from "@/lib/whatsapp";
@@ -84,10 +89,18 @@ export default function AdminDashboardPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
 
-  const [tab, setTab] = useState<"fiado" | "produtos" | "fatura">("fiado");
+  const [tab, setTab] = useState<"fiado" | "produtos" | "whatsapp" | "fatura">("fiado");
   const [copied, setCopied] = useState(false);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [uploadingImg, setUploadingImg] = useState(false);
+
+  // WhatsApp Baileys State (QR Code dentro do Admin)
+  const [zapConnected, setZapConnected] = useState(false);
+  const [zapQR, setZapQR] = useState<string | null>(null);
+  const [zapLoading, setZapLoading] = useState(false);
+  const [zapConfigured, setZapConfigured] = useState(true);
+  const [zapError, setZapError] = useState<string | null>(null);
+  const [disconnectingZap, setDisconnectingZap] = useState(false);
 
   const [showNewCustomer, setShowNewCustomer] = useState(false);
   const [showNewProduct, setShowNewProduct] = useState(false);
@@ -182,7 +195,51 @@ export default function AdminDashboardPage() {
     setCustomers(custRes.data || []);
     setSales(salesRes.data || []);
     setLoading(false);
+    fetchZapStatus();
   }
+
+  const fetchZapStatus = async () => {
+    try {
+      setZapLoading(true);
+      const res = await fetch("/api/zap/qr", { cache: "no-store" });
+      const data = await res.json();
+      setZapConfigured(data.configured !== false);
+      setZapConnected(!!data.connected);
+      setZapQR(data.qrDataUrl || null);
+      setZapError(data.error || null);
+    } catch {
+      setZapError("Não foi possível verificar status do WhatsApp.");
+    } finally {
+      setZapLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    let interval: any;
+    if (tab === "whatsapp" && !zapConnected) {
+      interval = setInterval(fetchZapStatus, 4000);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [tab, zapConnected]);
+
+  const handleDisconnectZap = async () => {
+    if (!confirm("Deseja desconectar o WhatsApp do robô de cobrança?")) return;
+    setDisconnectingZap(true);
+    try {
+      const res = await fetch("/api/zap/disconnect", { method: "POST" });
+      if (!res.ok) throw new Error("Falha ao desconectar");
+      setZapConnected(false);
+      setZapQR(null);
+      await fetchZapStatus();
+      alert("WhatsApp desconectado com sucesso.");
+    } catch (err: any) {
+      alert(err.message || "Erro ao desconectar WhatsApp.");
+    } finally {
+      setDisconnectingZap(false);
+    }
+  };
 
   const handleImageUpload = async (
     e: React.ChangeEvent<HTMLInputElement>,
@@ -728,6 +785,143 @@ export default function AdminDashboardPage() {
           </>
         )}
 
+        {tab === "whatsapp" && (
+          <div className="space-y-4">
+            {/* Header / Visão Geral do Robô */}
+            <div className="bg-white rounded-[32px] p-6 sm:p-7 border border-slate-200/70 shadow-sm shadow-slate-200/50 space-y-4">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <span className={`inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase px-3 py-1 rounded-full border ${
+                    zapConnected 
+                      ? "bg-emerald-50 text-emerald-800 border-emerald-200/80"
+                      : "bg-amber-50 text-amber-800 border-amber-200/80"
+                  }`}>
+                    <span className={`w-2 h-2 rounded-full ${zapConnected ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
+                    {zapConnected ? "Robô Conectado 24/7" : "Aguardando Conexão"}
+                  </span>
+                  <h3 className="font-extrabold text-xl text-slate-900 mt-2 tracking-tight">
+                    Robô de Cobrança no WhatsApp
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1 font-medium leading-relaxed">
+                    Conecte o seu número de WhatsApp para disparar lembretes educados de fiado com o botão Copiar Pix direto aos seus clientes.
+                  </p>
+                </div>
+                <div className="w-13 h-13 rounded-2xl bg-emerald-50 border border-emerald-100/80 text-emerald-600 flex items-center justify-center shrink-0 shadow-xs">
+                  <MessageCircle className="w-6 h-6 stroke-[2]" />
+                </div>
+              </div>
+
+              {/* Status Conectado */}
+              {zapConnected ? (
+                <div className="p-5 bg-gradient-to-br from-emerald-50 via-emerald-50/60 to-teal-50 rounded-2xl border border-emerald-200/80 space-y-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-sm">
+                      <CheckCircle2 className="w-6 h-6" />
+                    </div>
+                    <div>
+                      <h4 className="font-extrabold text-sm text-emerald-950">
+                        Seu WhatsApp está 100% ativo!
+                      </h4>
+                      <p className="text-xs text-emerald-700 font-medium">
+                        Pronto para enviar cobranças manuais e automáticas com Pix.
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 flex flex-col sm:flex-row gap-2.5">
+                    <button
+                      onClick={fetchZapStatus}
+                      className="px-4 py-2.5 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition active:scale-95 shadow-xs"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" /> Atualizar Status
+                    </button>
+                    <button
+                      onClick={handleDisconnectZap}
+                      disabled={disconnectingZap}
+                      className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition active:scale-95"
+                    >
+                      {disconnectingZap ? "Desconectando..." : "Desconectar WhatsApp"}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Status Desconectado: Exibe QR Code Dentro do Admin */
+                <div className="space-y-4">
+                  {!zapConfigured && (
+                    <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 space-y-1">
+                      <p className="font-extrabold">⚠️ Configuração de Servidor Pendente</p>
+                      <p>Adicione a variável <code>ZAP_API_URL</code> nas Environment Variables da Vercel com a URL do seu Railway para carregar o QR Code aqui.</p>
+                    </div>
+                  )}
+
+                  <div className="bg-slate-50 rounded-3xl p-6 border border-slate-200/80 text-center space-y-4">
+                    {zapLoading && !zapQR ? (
+                      <div className="py-12 space-y-3">
+                        <RefreshCw className="w-8 h-8 text-emerald-600 animate-spin mx-auto" />
+                        <p className="text-sm font-extrabold text-slate-800">
+                          Gerando QR Code de Conexão...
+                        </p>
+                        <p className="text-xs text-slate-400">
+                          Isso leva apenas alguns instantes.
+                        </p>
+                      </div>
+                    ) : zapQR ? (
+                      <div className="space-y-4">
+                        <div className="inline-block bg-white p-3 rounded-3xl border border-slate-200/80 shadow-lg">
+                          <img
+                            src={zapQR}
+                            alt="QR Code WhatsApp"
+                            className="w-64 h-64 mx-auto rounded-2xl"
+                          />
+                        </div>
+                        <div className="flex items-center justify-center gap-2">
+                          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                          <p className="text-xs font-extrabold text-slate-700">
+                            QR Code Ativo • Escaneie com a câmera do WhatsApp
+                          </p>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="py-8 space-y-3">
+                        <Smartphone className="w-10 h-10 text-slate-300 mx-auto" />
+                        <p className="text-sm font-extrabold text-slate-700">
+                          Aguardando início do Baileys
+                        </p>
+                        <button
+                          onClick={fetchZapStatus}
+                          className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-extrabold hover:bg-emerald-500 transition"
+                        >
+                          Carregar QR Code
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Instruções passo a passo */}
+                    <div className="max-w-sm mx-auto text-left bg-white p-4 rounded-2xl border border-slate-200/60 shadow-xs space-y-2 text-xs text-slate-600">
+                      <p className="font-extrabold text-slate-900 flex items-center gap-1.5">
+                        <Smartphone className="w-4 h-4 text-emerald-600" /> Como conectar:
+                      </p>
+                      <ol className="list-decimal list-inside space-y-1 font-medium text-slate-700">
+                        <li>Abra o <strong>WhatsApp</strong> no seu celular</li>
+                        <li>Toque no menu (3 pontinhos ou Ajustes)</li>
+                        <li>Selecione <strong>Aparelhos Conectados</strong></li>
+                        <li>Toque em <strong>Conectar Aparelho</strong> e aponte a câmera para o QR Code acima</li>
+                      </ol>
+                    </div>
+
+                    <button
+                      onClick={fetchZapStatus}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition active:scale-95"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" /> Atualizar QR Code
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {tab === "fatura" && (
           <div className="space-y-4">
             {/* Card Fatura Atual */}
@@ -922,41 +1116,63 @@ export default function AdminDashboardPage() {
 
       {/* Floating Bottom Island Dock */}
       <nav className="fixed bottom-4 inset-x-4 z-40 max-w-md mx-auto bg-white/95 backdrop-blur-xl border border-slate-200/80 rounded-[28px] p-2 shadow-2xl shadow-slate-900/10 ring-1 ring-black/5">
-        <div className="grid grid-cols-3 gap-1.5">
+        <div className="grid grid-cols-4 gap-1">
           <button
             onClick={() => setTab("fiado")}
-            className={`py-2.5 px-3 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+            className={`py-2 px-1.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
               tab === "fiado"
                 ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
                 : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
             }`}
           >
             <Users className="w-5 h-5 stroke-[2]" />
-            <span className="text-[11px]">Fiado</span>
+            <span className="text-[10px] sm:text-[11px]">Fiado</span>
           </button>
 
           <button
             onClick={() => setTab("produtos")}
-            className={`py-2.5 px-3 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+            className={`py-2 px-1.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
               tab === "produtos"
                 ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
                 : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
             }`}
           >
             <Package className="w-5 h-5 stroke-[2]" />
-            <span className="text-[11px]">Produtos</span>
+            <span className="text-[10px] sm:text-[11px]">Produtos</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setTab("whatsapp");
+              fetchZapStatus();
+            }}
+            className={`relative py-2 px-1.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+              tab === "whatsapp"
+                ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
+                : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
+            }`}
+          >
+            <div className="relative">
+              <MessageCircle className="w-5 h-5 stroke-[2]" />
+              <span
+                className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full ring-2 ring-white ${
+                  zapConnected ? "bg-emerald-500 animate-pulse" : "bg-amber-400"
+                }`}
+              />
+            </div>
+            <span className="text-[10px] sm:text-[11px] truncate">WhatsApp</span>
           </button>
 
           <button
             onClick={() => setTab("fatura")}
-            className={`py-2.5 px-3 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+            className={`py-2 px-1.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
               tab === "fatura"
                 ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
                 : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
             }`}
           >
             <Receipt className="w-5 h-5 stroke-[2]" />
-            <span className="text-[11px]">Fatura</span>
+            <span className="text-[10px] sm:text-[11px]">Fatura</span>
           </button>
         </div>
       </nav>
