@@ -9,7 +9,8 @@ const {
   fetchLatestBaileysVersion,
 } = require("@whiskeysockets/baileys");
 const { Boom } = require("@hapi/boom");
-const qrcode = require("qrcode-terminal");
+const qrcodeTerminal = require("qrcode-terminal");
+const QRCode = require("qrcode");
 const pino = require("pino");
 const { generatePixCopiaECola } = require("./pix");
 
@@ -26,6 +27,7 @@ const supabase =
 
 let sock = null;
 let isConnected = false;
+let latestQR = null;
 
 async function connectToWhatsApp() {
   const { state, saveCreds } = await useMultiFileAuthState("./auth_info");
@@ -44,8 +46,9 @@ async function connectToWhatsApp() {
     const { connection, lastDisconnect, qr } = update;
 
     if (qr) {
+      latestQR = qr;
       console.log("\n📱 Escaneie o QR Code abaixo no seu WhatsApp:");
-      qrcode.generate(qr, { small: true });
+      qrcodeTerminal.generate(qr, { small: true });
     }
 
     if (connection === "close") {
@@ -61,6 +64,7 @@ async function connectToWhatsApp() {
       }
     } else if (connection === "open") {
       isConnected = true;
+      latestQR = null;
       console.log("✅ WhatsApp conectado e pronto para enviar cobranças!");
     }
   });
@@ -82,7 +86,104 @@ async function sendChargeMessages(phone, text, pixCode) {
 }
 
 app.get("/status", (req, res) => {
-  res.json({ connected: isConnected });
+  res.json({ connected: isConnected, hasQR: !!latestQR });
+});
+
+app.get(["/", "/qr"], async (req, res) => {
+  if (isConnected) {
+    return res.send(`
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>meufiadim-zap • Conectado</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #090D16; color: white; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+          .card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 28px; padding: 36px; max-width: 420px; width: 100%; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
+          .badge { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border-radius: 999px; background: rgba(16,185,129,0.15); color: #34d399; font-size: 13px; font-weight: 700; border: 1px solid rgba(16,185,129,0.3); margin-bottom: 16px; }
+          .dot { width: 8px; height: 8px; border-radius: 50%; background: #10b981; }
+          h1 { margin: 0 0 10px; font-size: 22px; font-weight: 800; }
+          p { color: #94a3b8; font-size: 14px; margin: 0; line-height: 1.5; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <div class="badge"><span class="dot"></span> Online 24/7</div>
+          <h1>WhatsApp Conectado!</h1>
+          <p>O robô do <strong>meufiadim</strong> está ativo e pronto para disparar cobranças com Pix Copia e Cola.</p>
+        </div>
+      </body>
+      </html>
+    `);
+  }
+
+  if (!latestQR) {
+    return res.send(`
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="refresh" content="3">
+        <title>meufiadim-zap • Gerando QR Code</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #090D16; color: white; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+          .card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 28px; padding: 36px; max-width: 420px; width: 100%; text-align: center; }
+          h1 { font-size: 20px; margin: 0 0 8px; }
+          p { color: #94a3b8; font-size: 14px; margin: 0; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h1>Iniciando Baileys...</h1>
+          <p>Aguarde alguns segundos, esta página vai atualizar automaticamente com o QR Code.</p>
+        </div>
+      </body>
+      </html>
+    `);
+  }
+
+  try {
+    const qrDataUrl = await QRCode.toDataURL(latestQR, { width: 320, margin: 2 });
+    return res.send(`
+      <!DOCTYPE html>
+      <html lang="pt-BR">
+      <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta http-equiv="refresh" content="20">
+        <title>Conectar WhatsApp • meufiadim</title>
+        <style>
+          body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #090D16; color: white; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+          .card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 32px; padding: 32px 24px; max-width: 380px; width: 100%; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.6); }
+          h1 { margin: 0 0 6px; font-size: 20px; font-weight: 800; }
+          p { color: #94a3b8; font-size: 13px; margin: 0 0 20px; line-height: 1.4; }
+          .qr-box { background: white; padding: 12px; border-radius: 24px; display: inline-block; box-shadow: 0 10px 25px rgba(0,0,0,0.3); }
+          .qr-box img { display: block; width: 280px; height: 280px; border-radius: 12px; }
+          .steps { margin-top: 22px; text-align: left; background: rgba(0,0,0,0.25); padding: 14px 16px; border-radius: 18px; font-size: 12px; color: #cbd5e1; line-height: 1.6; }
+          .steps strong { color: #34d399; }
+        </style>
+      </head>
+      <body>
+        <div class="card">
+          <h1>Conectar WhatsApp</h1>
+          <p>Escaneie o QR Code abaixo com o WhatsApp do seu número de cobrança:</p>
+          <div class="qr-box">
+            <img src="${qrDataUrl}" alt="QR Code WhatsApp" />
+          </div>
+          <div class="steps">
+            1. Abra o <strong>WhatsApp</strong> no celular<br>
+            2. Toque em <strong>Aparelhos Conectados</strong><br>
+            3. Toque em <strong>Conectar Aparelho</strong> e aponte para a tela
+          </div>
+        </div>
+      </body>
+      </html>
+    `);
+  } catch (err) {
+    return res.status(500).send("Erro ao renderizar QR Code.");
+  }
 });
 
 app.post("/send", async (req, res) => {
