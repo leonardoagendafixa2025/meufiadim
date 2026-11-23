@@ -1,0 +1,38 @@
+{
+  "servers": {
+    "cloudinary-asset-mgmt": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "--registry",
+        "https://registry.npmjs.org",
+        "--package",
+        "@cloudinary/asset-management",
+        "--",
+        "mcp",
+        "start",
+        "--transport",
+        "stdio"
+      ],
+      "envFile": "${workspaceFolder}/.env"
+    },
+    "cloudinary-env-config": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "--registry",
+        "https://registry.npmjs.org",
+        "--package",
+        "@cloudinary/environment-config",
+        "--",
+        "mcp",
+        "start",
+        "--transport",
+        "stdio"
+      ],
+      "envFile": "${workspaceFolder}/.env"
+    }
+  }
+}

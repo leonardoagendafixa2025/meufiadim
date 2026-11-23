@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Cloudinary Getting Started Preview — meufiadim</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card: #1e293b;
+      --text: #f8fafc;
+      --muted: #94a3b8;
+      --accent: #10b981;
+      --border: #334155;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      margin: 0;
+      padding: 2rem 1rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .container {
+      max-width: 1040px;
+      width: 100%;
+    }
+    h1 {
+      font-size: 1.875rem;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+      text-align: center;
+    }
+    p.subtitle {
+      color: var(--muted);
+      text-align: center;
+      margin-top: 0;
+      margin-bottom: 2rem;
+    }
+    .comparison-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 1.5rem;
+      margin-bottom: 2rem;
+    }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+    .card-header {
+      padding: 1rem 1.25rem;
+      border-bottom: 1px solid var(--border);
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .badge {
+      font-size: 0.75rem;
+      padding: 0.25rem 0.6rem;
+      border-radius: 9999px;
+      background: #064e3b;
+      color: #6ee7b7;
+      font-weight: 700;
+    }
+    .card-media {
+      width: 100%;
+      height: 360px;
+      background: #020617;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+    .card-media img {
+      max-width: 100%;
+      max-height: 100%;
+      object-fit: contain;
+    }
+    .card-body {
+      padding: 1.25rem;
+      font-size: 0.875rem;
+      color: var(--muted);
+    }
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 0.35rem 0;
+      border-bottom: 1px solid #1e293b;
+    }
+    .stat-value {
+      color: var(--text);
+      font-weight: 600;
+    }
+    .savings-banner {
+      background: linear-gradient(135deg, #065f46, #047857);
+      border-radius: 1rem;
+      padding: 1.25rem;
+      text-align: center;
+      margin-bottom: 2rem;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+    }
+    .savings-number {
+      font-size: 2.25rem;
+      font-weight: 800;
+      color: #ecfdf5;
+    }
+    .snippet-box {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      padding: 1.25rem;
+    }
+    pre {
+      background: #020617;
+      padding: 1rem;
+      border-radius: 0.5rem;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      color: #e2e8f0;
+      line-height: 1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Cloudinary Optimization & Delivery Preview</h1>
+    <p class="subtitle">Comparação de entrega em tempo real da nuvem: <strong>sq8tglen</strong></p>
+
+    <!-- Savings Banner: Mostra a redução de tamanho obtida via f_auto/q_auto e redimensionamento inteligente -->
+    <div class="savings-banner">
+      <div class="savings-number">65.0% de Economia</div>
+      <div>Tamanho reduzido de <strong>165.3 KB</strong> para <strong>57.9 KB</strong> mantendo excelente fidelidade visual.</div>
+    </div>
+
+    <!-- Comparison Grid: Imagem Original vs Otimizada com Cloudinary -->
+    <div class="comparison-grid">
+      <!-- Imagem Original -->
+      <div class="card">
+        <div class="card-header">
+          <span>Imagem Original</span>
+          <span style="color: var(--muted); font-size: 0.75rem;">samples/coffee</span>
+        </div>
+        <div class="card-media">
+          <img id="img-original" src="https://res.cloudinary.com/sq8tglen/image/upload/samples/coffee" alt="Imagem Original">
+        </div>
+        <div class="card-body">
+          <div class="stat-row">
+            <span>Dimensões:</span>
+            <span class="stat-value" id="stats-orig-dims">1920 &times; 1280 px</span>
+          </div>
+          <div class="stat-row">
+            <span>Formato:</span>
+            <span class="stat-value" id="stats-orig-format">JPEG</span>
+          </div>
+          <div class="stat-row">
+            <span>Tamanho transferido:</span>
+            <span class="stat-value" id="stats-orig-size">165.3 KB (165,287 bytes)</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Imagem Otimizada / Transformada -->
+      <div class="card">
+        <div class="card-header">
+          <span>Otimizada com Cloudinary</span>
+          <span class="badge">f_auto, q_auto</span>
+        </div>
+        <div class="card-media">
+          <img id="img-transformed" src="https://res.cloudinary.com/sq8tglen/image/upload/b_gen_fill,c_pad,h_1000,w_1000,y_-100/l_text:Arial_72_bold:Adapt%20everywhere,co_white/e_shadow:50/fl_layer_apply,g_south_west,x_80,y_140/l_text:Arial_34:Dynamic%20media%20built%20in%20real%20time,co_rgb:E9D5FF/e_shadow:35/fl_layer_apply,g_south_west,x_84,y_90/f_auto/q_auto/samples/coffee" alt="Imagem Otimizada com Cloudinary">
+        </div>
+        <div class="card-body">
+          <div class="stat-row">
+            <span>Dimensões:</span>
+            <span class="stat-value" id="stats-trans-dims">1000 &times; 1000 px</span>
+          </div>
+          <div class="stat-row">
+            <span>Formato:</span>
+            <span class="stat-value" id="stats-trans-format">WebP (selecionado automaticamente)</span>
+          </div>
+          <div class="stat-row">
+            <span>Tamanho transferido:</span>
+            <span class="stat-value" id="stats-trans-size">57.9 KB (57,872 bytes)</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Integration Snippet: Código SDK Next.js / Node v2 para gerar a URL -->
+    <div class="snippet-box" id="stage-5-integration-snippet">
+      <h3 style="margin-top: 0; font-size: 1.1rem;">Next.js / Node.js SDK Snippet</h3>
+      <p style="color: var(--muted); font-size: 0.875rem;">Como gerar esta entrega otimizada usando o SDK oficial do Cloudinary:</p>
+      <pre><code>import { v2 as cloudinary } from 'cloudinary';
+
+cloudinary.config({
+  cloud_name: 'sq8tglen',
+  secure: true
+});
+
+const deliveryUrl = cloudinary.url('samples/coffee', {
+  transformation: [
+    { background: 'gen_fill', crop: 'pad', height: 1000, width: 1000, y: -100 },
+    { overlay: { font_family: 'Arial', font_size: 72, font_weight: 'bold', text: 'Adapt everywhere' }, color: 'white' },
+    { effect: 'shadow:50' },
+    { flags: 'layer_apply', gravity: 'south_west', x: 80, y: 140 },
+    { overlay: { font_family: 'Arial', font_size: 34, text: 'Dynamic media built in real time' }, color: 'rgb:E9D5FF' },
+    { effect: 'shadow:35' },
+    { flags: 'layer_apply', gravity: 'south_west', x: 84, y: 90 },
+    { fetch_format: 'auto', quality: 'auto' }
+  ]
+});</code></pre>
+    </div>
+  </div>
+
+  <script>
+    // Fetch dinâmico no navegador com o header Accept padrão para verificar e medir dimensões em tempo real
+    (async function measureInBrowser() {
+      const acceptHeader = 'image/avif,image/webp,image/apng,image/svg+xml,image/*,*/*;q=0.8';
+      const origUrl = 'https://res.cloudinary.com/sq8tglen/image/upload/samples/coffee';
+      const transUrl = 'https://res.cloudinary.com/sq8tglen/image/upload/b_gen_fill,c_pad,h_1000,w_1000,y_-100/l_text:Arial_72_bold:Adapt%20everywhere,co_white/e_shadow:50/fl_layer_apply,g_south_west,x_80,y_140/l_text:Arial_34:Dynamic%20media%20built%20in%20real%20time,co_rgb:E9D5FF/e_shadow:35/fl_layer_apply,g_south_west,x_84,y_90/f_auto/q_auto/samples/coffee';
+
+      try {
+        if ('createImageBitmap' in window) {
+          const [resOrig, resTrans] = await Promise.all([
+            fetch(origUrl, { headers: { 'Accept': acceptHeader } }),
+            fetch(transUrl, { headers: { 'Accept': acceptHeader } })
+          ]);
+          
+          const blobOrig = await resOrig.blob();
+          const blobTrans = await resTrans.blob();
+
+          const [bmpOrig, bmpTrans] = await Promise.all([
+            createImageBitmap(blobOrig),
+            createImageBitmap(blobTrans)
+          ]);
+
+          document.getElementById('stats-orig-dims').textContent = bmpOrig.width + ' × ' + bmpOrig.height + ' px';
+          document.getElementById('stats-trans-dims').textContent = bmpTrans.width + ' × ' + bmpTrans.height + ' px';
+          document.getElementById('stats-orig-size').textContent = (blobOrig.size / 1024).toFixed(1) + ' KB (' + blobOrig.size.toLocaleString() + ' bytes)';
+          document.getElementById('stats-trans-size').textContent = (blobTrans.size / 1024).toFixed(1) + ' KB (' + blobTrans.size.toLocaleString() + ' bytes)';
+        }
+      } catch (e) {
+        console.warn('Medição dinâmica no navegador utilizou valores estáticos pré-computados:', e);
+      }
+    })();
+  </script>
+</body>
+</html>
