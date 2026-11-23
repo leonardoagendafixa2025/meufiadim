@@ -398,10 +398,10 @@ export default function AdminDashboardPage() {
 
   if (loading || !store) {
     return (
-      <div className="min-h-screen bg-[#F7F8FA] p-6 space-y-4">
-        <div className="h-44 bg-gray-200 rounded-3xl animate-pulse" />
-        <div className="h-28 bg-white rounded-3xl animate-pulse" />
-        <div className="h-28 bg-white rounded-3xl animate-pulse" />
+      <div className="min-h-screen bg-[#F8FAFC] p-6 space-y-4 max-w-3xl mx-auto">
+        <div className="h-48 bg-slate-200/70 rounded-[32px] animate-pulse" />
+        <div className="h-28 bg-white rounded-3xl border border-slate-100 shadow-sm animate-pulse" />
+        <div className="h-28 bg-white rounded-3xl border border-slate-100 shadow-sm animate-pulse" />
       </div>
     );
   }
@@ -414,17 +414,31 @@ export default function AdminDashboardPage() {
   );
 
   return (
-    <div className="min-h-screen bg-[#F7F8FA] text-gray-900 pb-28">
-      <header className="bg-gradient-to-br from-gray-900 via-gray-900 to-emerald-950 text-white pt-6 pb-10 px-5 rounded-b-[2rem] shadow-lg">
-        <div className="max-w-3xl mx-auto">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <img src="/logo.png" alt="meufiadim" className="h-10 w-auto object-contain bg-white/10 rounded-xl p-1" />
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 pb-32">
+      {/* Top Header com Glassmorphism e Mesh Gradient */}
+      <header className="relative bg-gradient-to-br from-slate-950 via-slate-900 to-emerald-950 text-white pt-7 pb-11 px-5 sm:px-8 rounded-b-[2.5rem] shadow-xl overflow-hidden">
+        {/* Glow de fundo */}
+        <div className="absolute top-0 right-1/4 w-72 h-72 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute bottom-0 left-10 w-60 h-60 bg-amber-400/10 rounded-full blur-3xl pointer-events-none" />
+
+        <div className="relative max-w-3xl mx-auto">
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3.5">
+              <div className="relative">
+                <img
+                  src="/logo.png"
+                  alt="meufiadim"
+                  className="h-11 w-auto object-contain bg-white/10 backdrop-blur-md rounded-2xl p-1.5 border border-white/15 shadow-md"
+                />
+              </div>
               <div>
-                <p className="text-xs text-emerald-400 font-semibold uppercase tracking-wider">
-                  meufiadim • Painel
-                </p>
-                <h1 className="text-xl font-bold mt-0.5">{store.name}</h1>
+                <span className="inline-flex items-center gap-1.5 text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  Painel do Lojista
+                </span>
+                <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight mt-0.5 truncate text-white">
+                  {store.name}
+                </h1>
               </div>
             </div>
 
@@ -433,14 +447,14 @@ export default function AdminDashboardPage() {
                 href={`/${store.slug}`}
                 target="_blank"
                 rel="noreferrer"
-                className="p-2.5 bg-white/10 hover:bg-white/20 rounded-xl transition"
-                title="Abrir vitrine"
+                className="p-2.5 bg-white/10 hover:bg-white/20 active:scale-95 text-white rounded-2xl border border-white/10 transition-all duration-150 shadow-xs flex items-center justify-center"
+                title="Abrir vitrine da loja"
               >
                 <ExternalLink className="w-4 h-4" />
               </a>
               <button
                 onClick={handleLogout}
-                className="p-2.5 bg-white/10 hover:bg-white/20 rounded-xl transition"
+                className="p-2.5 bg-white/10 hover:bg-rose-500/20 hover:text-rose-300 active:scale-95 text-white/90 rounded-2xl border border-white/10 transition-all duration-150 shadow-xs flex items-center justify-center"
                 title="Sair"
               >
                 <LogOut className="w-4 h-4" />
@@ -448,33 +462,35 @@ export default function AdminDashboardPage() {
             </div>
           </div>
 
-          <div className="mt-6 grid grid-cols-2 gap-3">
-            <div className="bg-white/10 backdrop-blur rounded-2xl p-4">
-              <p className="text-[11px] text-gray-300 font-medium">
+          {/* Cards de Métricas Principais */}
+          <div className="mt-6 grid grid-cols-2 gap-3.5">
+            <div className="group bg-white/[0.08] hover:bg-white/[0.12] backdrop-blur-md rounded-3xl p-4 sm:p-5 border border-white/10 shadow-lg shadow-black/10 transition-all duration-200">
+              <p className="text-[11px] text-slate-300 font-semibold tracking-wide">
                 A receber (Fiado)
               </p>
-              <p className="text-2xl font-extrabold mt-1 tracking-tight text-white">
+              <p className="text-2xl sm:text-3xl font-extrabold mt-1 tracking-tight text-white group-hover:scale-[1.02] transition-transform">
                 {formatBRL(totalReceivable)}
               </p>
             </div>
 
-            <div className="bg-white/10 backdrop-blur rounded-2xl p-4">
-              <p className="text-[11px] text-gray-300 font-medium">
+            <div className="group bg-white/[0.08] hover:bg-white/[0.12] backdrop-blur-md rounded-3xl p-4 sm:p-5 border border-white/10 shadow-lg shadow-black/10 transition-all duration-200">
+              <p className="text-[11px] text-emerald-300 font-semibold tracking-wide">
                 Vendas registradas
               </p>
-              <p className="text-2xl font-extrabold mt-1 tracking-tight text-emerald-400">
+              <p className="text-2xl sm:text-3xl font-extrabold mt-1 tracking-tight text-emerald-400 group-hover:scale-[1.02] transition-transform">
                 {formatBRL(totalSales)}
               </p>
             </div>
           </div>
 
-          <div className="mt-4 bg-black/30 rounded-2xl px-3.5 py-2.5 flex items-center justify-between gap-2">
-            <span className="text-xs text-gray-300 truncate">
-              meufiadim.com/<strong className="text-white">{store.slug}</strong>
+          {/* Barra do Link da Vitrine */}
+          <div className="mt-4 bg-black/40 backdrop-blur-md rounded-2xl p-2 pl-4 border border-white/10 flex items-center justify-between gap-3 shadow-inner">
+            <span className="text-xs text-slate-300 truncate">
+              meufiadim.com/<strong className="text-white font-extrabold">{store.slug}</strong>
             </span>
             <button
               onClick={handleCopyLink}
-              className="px-3 py-1.5 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shrink-0 transition"
+              className="px-3.5 py-2 bg-emerald-500 hover:bg-emerald-400 active:scale-[0.97] text-white rounded-xl text-xs font-extrabold flex items-center gap-1.5 shrink-0 shadow-md shadow-emerald-500/25 transition-all duration-150"
             >
               {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
               {copied ? "Copiado!" : "Copiar link"}
@@ -483,13 +499,13 @@ export default function AdminDashboardPage() {
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 mt-6 space-y-4">
+      <main className="max-w-3xl mx-auto px-4 mt-6 space-y-5">
         {store.status === "blocked" && (
-          <div className="bg-red-50 border border-red-200 text-red-700 p-4 rounded-2xl flex items-center gap-3 text-sm">
-            <AlertCircle className="w-5 h-5 shrink-0" />
-            <span>
+          <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-3xl flex items-center gap-3.5 text-sm shadow-sm shadow-rose-100">
+            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+            <span className="font-medium">
               Sua vitrine está pausada por fatura em aberto. Regularize na aba{" "}
-              <strong>Fatura</strong> para liberar.
+              <strong className="font-bold underline">Fatura</strong> para liberar suas vendas.
             </span>
           </div>
         )}
@@ -497,29 +513,43 @@ export default function AdminDashboardPage() {
         {tab === "fiado" && (
           <>
             <div className="flex items-center justify-between">
-              <h2 className="font-bold text-base text-gray-900">
-                Caderninho ({customers.length})
-              </h2>
+              <div>
+                <h2 className="font-extrabold text-lg text-slate-900 tracking-tight">
+                  Caderninho de Fiado
+                </h2>
+                <p className="text-xs text-slate-500 font-medium">
+                  {customers.length} cliente{customers.length === 1 ? "" : "s"} cadastrado{customers.length === 1 ? "" : "s"}
+                </p>
+              </div>
               <button
                 onClick={() => setShowNewCustomer(true)}
-                className="bg-gray-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 hover:bg-gray-800"
+                className="group inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs shadow-md shadow-slate-900/20 hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-150"
               >
-                <Plus className="w-4 h-4" /> Novo Cliente
+                <Plus className="w-4 h-4 text-emerald-400 group-hover:rotate-90 transition-transform duration-200" />
+                <span>Novo Cliente</span>
               </button>
             </div>
 
             {customers.length === 0 ? (
-              <div className="bg-white rounded-3xl p-10 text-center border border-gray-100">
-                <Users className="w-10 h-10 text-gray-300 mx-auto mb-2" />
-                <p className="text-sm font-semibold text-gray-700">
+              <div className="bg-white rounded-[32px] p-10 sm:p-12 text-center border border-slate-200/70 shadow-sm shadow-slate-200/40">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mx-auto mb-3 text-emerald-600 shadow-xs">
+                  <Users className="w-7 h-7 stroke-[1.75]" />
+                </div>
+                <h3 className="text-base font-extrabold text-slate-900">
                   Nenhum cliente no fiado ainda
+                </h3>
+                <p className="text-xs text-slate-500 max-w-xs mx-auto mt-1 leading-relaxed">
+                  Cadastre seus clientes para controlar saldos, limites e cobrar automaticamente no WhatsApp com chave Pix.
                 </p>
-                <p className="text-xs text-gray-400 mt-1">
-                  Cadastre seus clientes recorrentes para controlar limites e cobrar no Zap.
-                </p>
+                <button
+                  onClick={() => setShowNewCustomer(true)}
+                  className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 hover:-translate-y-0.5 active:scale-[0.98] transition-all"
+                >
+                  <Plus className="w-4 h-4" /> Cadastrar primeiro cliente
+                </button>
               </div>
             ) : (
-              <div className="space-y-3">
+              <div className="space-y-3.5">
                 {customers.map((c) => {
                   const pct =
                     c.credit_limit > 0
@@ -529,24 +559,24 @@ export default function AdminDashboardPage() {
                   return (
                     <div
                       key={c.id}
-                      className="bg-white rounded-3xl p-4 border border-gray-100 shadow-sm space-y-3"
+                      className="group bg-white rounded-3xl p-5 border border-slate-200/70 shadow-sm shadow-slate-200/50 hover:shadow-xl hover:shadow-slate-300/40 hover:-translate-y-0.5 hover:border-emerald-200/80 transition-all duration-200 space-y-4"
                     >
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-3">
-                          <div className="w-11 h-11 rounded-2xl bg-gray-100 text-gray-700 font-bold text-sm flex items-center justify-center shrink-0">
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="flex items-center gap-3.5 min-w-0">
+                          <div className="w-12 h-12 rounded-2xl bg-gradient-to-tr from-slate-100 to-slate-200/80 border border-slate-200/60 text-slate-700 font-extrabold text-sm flex items-center justify-center shrink-0 shadow-xs">
                             {c.name.slice(0, 2).toUpperCase()}
                           </div>
-                          <div>
-                            <h3 className="font-bold text-sm text-gray-900">
+                          <div className="min-w-0">
+                            <h3 className="font-extrabold text-base text-slate-900 truncate">
                               {c.name}
                             </h3>
-                            <p className="text-xs text-gray-400">{c.phone}</p>
+                            <p className="text-xs text-slate-500 font-medium">{c.phone}</p>
                             {c.due_date && c.balance > 0 && (
                               <span
-                                className={`inline-block mt-1 text-[11px] font-bold px-2 py-0.5 rounded-md ${
+                                className={`inline-flex items-center gap-1 mt-1 text-[11px] font-extrabold px-2.5 py-0.5 rounded-full border ${
                                   new Date(`${c.due_date}T23:59:59`) < new Date()
-                                    ? "bg-red-100 text-red-700"
-                                    : "bg-amber-100 text-amber-800"
+                                    ? "bg-rose-50 text-rose-700 border-rose-200/70"
+                                    : "bg-amber-50 text-amber-800 border-amber-200/70"
                                 }`}
                               >
                                 Vence em{" "}
@@ -558,51 +588,55 @@ export default function AdminDashboardPage() {
                           </div>
                         </div>
 
-                        <div className="text-right">
+                        <div className="text-right shrink-0">
                           <p
-                            className={`text-lg font-extrabold tracking-tight ${
-                              c.balance > 0 ? "text-red-600" : "text-emerald-600"
+                            className={`text-xl font-extrabold tracking-tight ${
+                              c.balance > 0 ? "text-rose-600" : "text-emerald-600"
                             }`}
                           >
                             {formatBRL(c.balance)}
                           </p>
-                          <p className="text-[11px] text-gray-400">
+                          <p className="text-[11px] text-slate-400 font-semibold mt-0.5">
                             Limite: {formatBRL(c.credit_limit)}
                           </p>
                         </div>
                       </div>
 
-                      <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      {/* Barra de progresso do limite */}
+                      <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden p-0.5">
                         <div
-                          className={`h-full rounded-full transition-all ${
-                            pct >= 90 ? "bg-red-500" : "bg-emerald-500"
+                          className={`h-full rounded-full transition-all duration-300 ${
+                            pct >= 90 ? "bg-rose-500" : "bg-emerald-500"
                           }`}
                           style={{ width: `${pct}%` }}
                         />
                       </div>
 
-                      <div className="grid grid-cols-3 gap-2 pt-1">
+                      {/* Botões de Ação com Microinterações */}
+                      <div className="grid grid-cols-3 gap-2 sm:gap-2.5 pt-1">
                         <button
                           onClick={() => setTxModal({ customer: c, type: "compra" })}
-                          className="py-2 px-2 bg-red-50 hover:bg-red-100 text-red-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition"
+                          className="py-2.5 px-2.5 bg-rose-50 hover:bg-rose-100/80 text-rose-700 border border-rose-200/60 rounded-2xl text-xs font-extrabold flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-150 shadow-xs"
                         >
-                          <ArrowUpRight className="w-3.5 h-3.5" /> Anotar
+                          <ArrowUpRight className="w-3.5 h-3.5 stroke-[2.2]" />
+                          <span>Anotar</span>
                         </button>
                         <button
                           onClick={() =>
                             setTxModal({ customer: c, type: "pagamento" })
                           }
-                          className="py-2 px-2 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition"
+                          className="py-2.5 px-2.5 bg-emerald-50 hover:bg-emerald-100/80 text-emerald-700 border border-emerald-200/60 rounded-2xl text-xs font-extrabold flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-150 shadow-xs"
                         >
-                          <ArrowDownLeft className="w-3.5 h-3.5" /> Receber
+                          <ArrowDownLeft className="w-3.5 h-3.5 stroke-[2.2]" />
+                          <span>Receber</span>
                         </button>
                         <button
                           onClick={() => handleSendCharge(c)}
                           disabled={c.balance <= 0 || sendingId === c.id}
-                          className="py-2 px-2 bg-gray-900 hover:bg-gray-800 disabled:bg-gray-200 disabled:text-gray-400 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition"
+                          className="py-2.5 px-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 disabled:from-slate-200 disabled:to-slate-200 disabled:text-slate-400 text-white rounded-2xl text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/25 hover:shadow-emerald-600/40 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-150 disabled:shadow-none disabled:pointer-events-none"
                         >
-                          <MessageCircle className="w-3.5 h-3.5" />
-                          {sendingId === c.id ? "..." : "Cobrar"}
+                          <MessageCircle className="w-3.5 h-3.5 stroke-[2]" />
+                          <span>{sendingId === c.id ? "Enviando..." : "Cobrar Zap"}</span>
                         </button>
                       </div>
                     </div>
@@ -616,133 +650,177 @@ export default function AdminDashboardPage() {
         {tab === "produtos" && (
           <>
             <div className="flex items-center justify-between">
-              <h2 className="font-bold text-base text-gray-900">
-                Catálogo ({products.length})
-              </h2>
+              <div>
+                <h2 className="font-extrabold text-lg text-slate-900 tracking-tight">
+                  Catálogo de Produtos
+                </h2>
+                <p className="text-xs text-slate-500 font-medium">
+                  {products.length} ite{products.length === 1 ? "m" : "ns"} ativo{products.length === 1 ? "" : "s"} na vitrine
+                </p>
+              </div>
               <button
                 onClick={() => setShowNewProduct(true)}
-                className="bg-gray-900 text-white px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-1.5 hover:bg-gray-800"
+                className="group inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs shadow-md shadow-slate-900/20 hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-150"
               >
-                <Plus className="w-4 h-4" /> Novo Produto
+                <Plus className="w-4 h-4 text-emerald-400 group-hover:rotate-90 transition-transform duration-200" />
+                <span>Novo Produto</span>
               </button>
             </div>
 
-            <div className="space-y-2.5">
-              {products.map((p) => (
-                <div
-                  key={p.id}
-                  className="bg-white rounded-2xl p-3.5 border border-gray-100 shadow-sm flex items-center justify-between gap-3"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center overflow-hidden shrink-0">
-                      {p.image_url ? (
-                        <img
-                          src={p.image_url}
-                          alt={p.name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <Package className="w-5 h-5 text-gray-400" />
-                      )}
-                    </div>
-                    <div className="min-w-0">
-                      <p className="font-bold text-sm truncate">{p.name}</p>
-                      <p className="text-xs text-gray-500">
-                        {formatBRL(p.price)} • Estoque: {p.stock}
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => handleDeleteProduct(p.id)}
-                    className="p-2 text-red-500 hover:bg-red-50 rounded-xl shrink-0"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
+            {products.length === 0 ? (
+              <div className="bg-white rounded-[32px] p-10 sm:p-12 text-center border border-slate-200/70 shadow-sm shadow-slate-200/40">
+                <div className="w-14 h-14 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center mx-auto mb-3 text-emerald-600 shadow-xs">
+                  <Package className="w-7 h-7 stroke-[1.75]" />
                 </div>
-              ))}
-            </div>
+                <h3 className="text-base font-extrabold text-slate-900">
+                  Sua vitrine ainda não tem produtos
+                </h3>
+                <p className="text-xs text-slate-500 max-w-xs mx-auto mt-1 leading-relaxed">
+                  Cadastre seus produtos com foto e preço para receber pedidos no WhatsApp e fiado.
+                </p>
+                <button
+                  onClick={() => setShowNewProduct(true)}
+                  className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 hover:-translate-y-0.5 active:scale-[0.98] transition-all"
+                >
+                  <Plus className="w-4 h-4" /> Cadastrar primeiro produto
+                </button>
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {products.map((p) => (
+                  <div
+                    key={p.id}
+                    className="group bg-white rounded-3xl p-4 border border-slate-200/70 shadow-sm shadow-slate-200/50 hover:shadow-md hover:border-slate-300 transition-all flex items-center justify-between gap-3.5"
+                  >
+                    <div className="flex items-center gap-3.5 min-w-0">
+                      <div className="w-14 h-14 rounded-2xl bg-slate-100 border border-slate-200/60 flex items-center justify-center overflow-hidden shrink-0">
+                        {p.image_url ? (
+                          <img
+                            src={p.image_url}
+                            alt={p.name}
+                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                          />
+                        ) : (
+                          <Package className="w-6 h-6 text-slate-400 stroke-[1.75]" />
+                        )}
+                      </div>
+                      <div className="min-w-0">
+                        <p className="font-extrabold text-sm text-slate-900 truncate">{p.name}</p>
+                        <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                          <span className="text-emerald-700 font-extrabold">{formatBRL(p.price)}</span> • Estoque: {p.stock} un
+                        </p>
+                        <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                          {p.category}
+                        </span>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteProduct(p.id)}
+                      className="p-2.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 active:scale-95 rounded-2xl transition-all duration-150 shrink-0"
+                      title="Excluir produto"
+                    >
+                      <Trash2 className="w-4 h-4 stroke-[1.75]" />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
           </>
         )}
 
         {tab === "fatura" && (
           <div className="space-y-4">
-            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm space-y-4">
-              <div className="flex items-center justify-between">
+            {/* Card Fatura Atual */}
+            <div className="bg-white rounded-[32px] p-6 sm:p-7 border border-slate-200/70 shadow-sm shadow-slate-200/50 hover:shadow-md transition-all space-y-4">
+              <div className="flex items-start justify-between gap-4">
                 <div>
-                  <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
-                    Fatura atual ({store.billing_cycle === "weekly" ? "Semanal" : "Mensal"})
+                  <span className="inline-flex items-center gap-1 text-[11px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-slate-100 text-slate-600 border border-slate-200/60">
+                    Ciclo {store.billing_cycle === "weekly" ? "Semanal" : "Mensal"}
                   </span>
-                  <p className="text-3xl font-extrabold text-gray-900 mt-1">
+                  <p className="text-3xl font-extrabold text-slate-900 mt-2 tracking-tight">
                     {formatBRL(totalCommissionDue)}
                   </p>
+                  <p className="text-xs text-slate-400 font-medium mt-0.5">
+                    Valor total de comissão acumulada
+                  </p>
                 </div>
-                <div className="w-12 h-12 rounded-2xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                  <TrendingUp className="w-6 h-6" />
+                <div className="w-13 h-13 rounded-2xl bg-emerald-50 border border-emerald-100/80 text-emerald-600 flex items-center justify-center shrink-0 shadow-xs">
+                  <TrendingUp className="w-6 h-6 stroke-[2]" />
                 </div>
               </div>
 
-              <div className="bg-gray-50 rounded-2xl p-3.5 flex justify-between text-xs text-gray-600">
-                <span>Taxa combinada sobre vendas</span>
-                <strong className="text-gray-900">{store.commission_rate}%</strong>
+              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3.5 flex justify-between items-center text-xs text-slate-600">
+                <span className="font-semibold">Taxa da plataforma sobre vendas</span>
+                <span className="text-slate-900 font-extrabold text-sm">{store.commission_rate}%</span>
               </div>
 
               <button
                 onClick={handlePayInvoice}
                 disabled={totalCommissionDue <= 0 || loadingMp}
-                className="w-full bg-emerald-600 hover:bg-emerald-700 disabled:bg-gray-200 disabled:text-gray-400 text-white py-3.5 rounded-2xl font-bold text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20 transition"
+                className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 disabled:from-slate-200 disabled:to-slate-200 disabled:text-slate-400 text-white py-4 px-4 rounded-2xl font-extrabold text-sm flex items-center justify-center gap-2.5 shadow-lg shadow-emerald-600/25 hover:shadow-emerald-600/40 hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-150 disabled:shadow-none disabled:pointer-events-none"
               >
-                <QrCode className="w-5 h-5" />
-                {loadingMp ? "Gerando Pix..." : "Pagar Fatura com Pix"}
+                <QrCode className="w-5 h-5 stroke-[2]" />
+                <span>{loadingMp ? "Gerando Pix..." : "Pagar Fatura com Pix"}</span>
               </button>
             </div>
 
             {/* Aparência da Vitrine (Logo via Cloudinary + Cor) */}
             <form
               onSubmit={handleSaveTheme}
-              className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm space-y-4"
+              className="bg-white rounded-[32px] p-6 sm:p-7 border border-slate-200/70 shadow-sm shadow-slate-200/50 hover:shadow-md transition-all space-y-4"
             >
-              <h3 className="font-bold text-sm">Aparência da sua Vitrine</h3>
+              <div>
+                <h3 className="font-extrabold text-base text-slate-900">
+                  Aparência da sua Vitrine
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5 font-medium">
+                  Personalize o logo e a cor que seus clientes veem ao comprar
+                </p>
+              </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-gray-500 block">
-                  Logo da loja (envio direto da galeria)
+                <label className="text-xs font-bold text-slate-700 block">
+                  Logotipo da loja
                 </label>
                 <input
                   type="file"
                   accept="image/*"
                   onChange={(e) => handleImageUpload(e, setLogoUrl)}
                   disabled={uploadingImg}
-                  className="w-full text-xs text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:font-bold file:bg-gray-900 file:text-white hover:file:bg-gray-800"
+                  className="w-full text-xs text-slate-500 file:mr-3 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:font-extrabold file:bg-slate-900 file:text-white hover:file:bg-slate-800 file:cursor-pointer transition"
                 />
                 {uploadingImg && (
-                  <p className="text-xs text-emerald-600 font-medium">
-                    Enviando imagem...
+                  <p className="text-xs text-emerald-600 font-bold animate-pulse">
+                    Enviando imagem para Cloudinary...
                   </p>
                 )}
                 {logoUrl && (
-                  <img
-                    src={logoUrl}
-                    alt="Logo atual"
-                    className="w-16 h-16 object-cover rounded-2xl border"
-                  />
+                  <div className="mt-2 flex items-center gap-3 p-2 bg-slate-50 rounded-2xl border border-slate-200/70 w-fit">
+                    <img
+                      src={logoUrl}
+                      alt="Logo atual"
+                      className="w-14 h-14 object-cover rounded-xl border border-slate-200 shadow-xs"
+                    />
+                    <span className="text-xs text-slate-600 font-semibold pr-2">Logo carregada</span>
+                  </div>
                 )}
               </div>
 
               <div className="space-y-2">
-                <label className="text-xs font-semibold text-gray-500 block">
-                  Cor principal da loja
+                <label className="text-xs font-bold text-slate-700 block">
+                  Cor principal da sua vitrine
                 </label>
-                <div className="flex flex-wrap items-center gap-2.5">
+                <div className="flex flex-wrap items-center gap-3">
                   {PRESET_COLORS.map((color) => (
                     <button
                       key={color}
                       type="button"
                       onClick={() => setPrimaryColor(color)}
                       style={{ backgroundColor: color }}
-                      className={`w-8 h-8 rounded-full transition-transform ${
+                      className={`w-9 h-9 rounded-2xl transition-all shadow-xs ${
                         primaryColor === color
-                          ? "ring-2 ring-offset-2 ring-gray-900 scale-110"
-                          : ""
+                          ? "ring-3 ring-offset-2 ring-slate-900 scale-110 shadow-md"
+                          : "hover:scale-105"
                       }`}
                     />
                   ))}
@@ -750,8 +828,8 @@ export default function AdminDashboardPage() {
                     type="color"
                     value={primaryColor}
                     onChange={(e) => setPrimaryColor(e.target.value)}
-                    className="w-8 h-8 rounded-full cursor-pointer border-0 bg-transparent"
-                    title="Escolher outra cor"
+                    className="w-9 h-9 rounded-2xl cursor-pointer border-0 bg-transparent p-0"
+                    title="Escolher cor personalizada"
                   />
                 </div>
               </div>
@@ -759,7 +837,7 @@ export default function AdminDashboardPage() {
               <button
                 type="submit"
                 disabled={savingTheme}
-                className="w-full bg-gray-900 text-white py-3 rounded-2xl font-bold text-sm"
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3.5 px-4 rounded-2xl font-extrabold text-sm shadow-md shadow-slate-900/15 hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-150 disabled:opacity-50"
               >
                 {savingTheme ? "Salvando..." : "Salvar aparência"}
               </button>
@@ -768,20 +846,23 @@ export default function AdminDashboardPage() {
             {/* Chave Pix do Lojista */}
             <form
               onSubmit={handleSavePix}
-              className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm space-y-3"
+              className="bg-white rounded-[32px] p-6 sm:p-7 border border-slate-200/70 shadow-sm shadow-slate-200/50 hover:shadow-md transition-all space-y-3.5"
             >
-              <h3 className="font-bold text-sm">
-                Sua Chave Pix (para receber dos clientes)
-              </h3>
-              <p className="text-xs text-gray-500">
-                Usada automaticamente pelo robô do WhatsApp nas cobranças de fiado.
-              </p>
+              <div>
+                <h3 className="font-extrabold text-base text-slate-900">
+                  Sua Chave Pix (para receber dos clientes)
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5 font-medium">
+                  Usada automaticamente pelo robô do WhatsApp ao enviar o botão Copiar Pix
+                </p>
+              </div>
+
               <input
                 type="text"
                 placeholder="CPF, CNPJ, E-mail, Celular ou Chave Aleatória"
                 value={pixKey}
                 onChange={(e) => setPixKey(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm"
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-sm font-semibold text-slate-900 placeholder:text-slate-400 shadow-xs focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none transition-all"
                 required
               />
               <input
@@ -789,43 +870,44 @@ export default function AdminDashboardPage() {
                 placeholder="Sua cidade (ex: Belo Horizonte)"
                 value={pixCity}
                 onChange={(e) => setPixCity(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm"
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-sm font-semibold text-slate-900 placeholder:text-slate-400 shadow-xs focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none transition-all"
               />
               <button
                 type="submit"
                 disabled={savingPix}
-                className="w-full bg-gray-900 text-white py-3 rounded-2xl font-bold text-sm"
+                className="w-full bg-slate-900 hover:bg-slate-800 text-white py-3.5 px-4 rounded-2xl font-extrabold text-sm shadow-md shadow-slate-900/15 hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-150 disabled:opacity-50"
               >
                 {savingPix ? "Salvando..." : "Salvar minha Chave Pix"}
               </button>
             </form>
 
-            <div className="bg-white rounded-3xl p-5 border border-gray-100 shadow-sm">
-              <h3 className="font-bold text-sm mb-3">Histórico de Vendas</h3>
+            {/* Histórico de Vendas */}
+            <div className="bg-white rounded-[32px] p-6 sm:p-7 border border-slate-200/70 shadow-sm shadow-slate-200/50 space-y-3">
+              <h3 className="font-extrabold text-base text-slate-900">Histórico de Vendas Recentes</h3>
               {sales.length === 0 ? (
-                <p className="text-xs text-gray-400">
-                  Nenhuma venda registrada neste ciclo.
+                <p className="text-xs text-slate-400 font-medium py-2">
+                  Nenhuma venda registrada neste ciclo ainda.
                 </p>
               ) : (
-                <div className="divide-y divide-gray-100">
+                <div className="divide-y divide-slate-100">
                   {sales.slice(0, 10).map((s) => (
                     <div
                       key={s.id}
-                      className="py-2.5 flex items-center justify-between text-xs"
+                      className="py-3 flex items-center justify-between text-xs"
                     >
                       <div>
-                        <p className="font-semibold text-gray-800">
+                        <p className="font-bold text-slate-900">
                           Venda ({s.payment_method})
                         </p>
-                        <p className="text-gray-400">
+                        <p className="text-slate-400 font-medium">
                           {new Date(s.created_at).toLocaleDateString("pt-BR")}
                         </p>
                       </div>
                       <div className="text-right">
-                        <p className="font-bold text-gray-900">
+                        <p className="font-extrabold text-sm text-slate-900">
                           {formatBRL(s.total_amount)}
                         </p>
-                        <p className="text-emerald-600 font-medium">
+                        <p className="text-emerald-700 font-bold">
                           Taxa: {formatBRL(s.commission_amount)}
                         </p>
                       </div>
@@ -838,54 +920,72 @@ export default function AdminDashboardPage() {
         )}
       </main>
 
-      <nav className="fixed bottom-0 inset-x-0 z-30 bg-white/90 backdrop-blur border-t border-gray-200 px-6 py-2">
-        <div className="max-w-md mx-auto grid grid-cols-3 gap-2">
+      {/* Floating Bottom Island Dock */}
+      <nav className="fixed bottom-4 inset-x-4 z-40 max-w-md mx-auto bg-white/95 backdrop-blur-xl border border-slate-200/80 rounded-[28px] p-2 shadow-2xl shadow-slate-900/10 ring-1 ring-black/5">
+        <div className="grid grid-cols-3 gap-1.5">
           <button
             onClick={() => setTab("fiado")}
-            className={`py-2 rounded-2xl flex flex-col items-center gap-1 transition ${
-              tab === "fiado" ? "text-emerald-600 font-bold" : "text-gray-400"
+            className={`py-2.5 px-3 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+              tab === "fiado"
+                ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
+                : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
             }`}
           >
-            <Users className="w-5 h-5" />
+            <Users className="w-5 h-5 stroke-[2]" />
             <span className="text-[11px]">Fiado</span>
           </button>
 
           <button
             onClick={() => setTab("produtos")}
-            className={`py-2 rounded-2xl flex flex-col items-center gap-1 transition ${
-              tab === "produtos" ? "text-emerald-600 font-bold" : "text-gray-400"
+            className={`py-2.5 px-3 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+              tab === "produtos"
+                ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
+                : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
             }`}
           >
-            <Package className="w-5 h-5" />
+            <Package className="w-5 h-5 stroke-[2]" />
             <span className="text-[11px]">Produtos</span>
           </button>
 
           <button
             onClick={() => setTab("fatura")}
-            className={`py-2 rounded-2xl flex flex-col items-center gap-1 transition ${
-              tab === "fatura" ? "text-emerald-600 font-bold" : "text-gray-400"
+            className={`py-2.5 px-3 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+              tab === "fatura"
+                ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
+                : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
             }`}
           >
-            <Receipt className="w-5 h-5" />
+            <Receipt className="w-5 h-5 stroke-[2]" />
             <span className="text-[11px]">Fatura</span>
           </button>
         </div>
       </nav>
 
+      {/* Modais de Transação, Cliente, Produto e MP */}
       {txModal && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
           <form
             onSubmit={handleTransaction}
-            className="bg-white w-full sm:max-w-md rounded-t-[2rem] sm:rounded-3xl p-6 space-y-4"
+            className="bg-white w-full sm:max-w-md rounded-t-[32px] sm:rounded-[32px] p-6 sm:p-7 shadow-2xl border border-slate-100 ring-1 ring-black/5 space-y-4"
           >
+            <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto sm:hidden mb-2" />
             <div className="flex justify-between items-center">
-              <h3 className="font-bold text-lg">
-                {txModal.type === "compra"
-                  ? `Anotar fiado — ${txModal.customer.name}`
-                  : `Receber de ${txModal.customer.name}`}
-              </h3>
-              <button type="button" onClick={() => setTxModal(null)}>
-                <X className="w-5 h-5 text-gray-400" />
+              <div>
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                  {txModal.type === "compra" ? "Nova Dívida" : "Abater Dívida"}
+                </span>
+                <h3 className="font-extrabold text-lg text-slate-900 mt-1">
+                  {txModal.type === "compra"
+                    ? `Anotar fiado — ${txModal.customer.name}`
+                    : `Receber de ${txModal.customer.name}`}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTxModal(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
             <input
@@ -894,60 +994,68 @@ export default function AdminDashboardPage() {
               placeholder="Valor (R$)"
               value={txAmount}
               onChange={(e) => setTxAmount(e.target.value)}
-              className="w-full px-4 py-3.5 bg-gray-50 border rounded-2xl text-lg font-bold focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              className="w-full px-4 py-3.5 bg-slate-50 border border-slate-200 rounded-2xl text-xl font-extrabold text-slate-900 placeholder:text-slate-400 shadow-xs focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none transition-all"
               autoFocus
               required
             />
             {txModal.type === "compra" && (
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-gray-500">
+                  <label className="text-xs font-bold text-slate-600">
                     Data de vencimento
                   </label>
                   <input
                     type="date"
                     value={txDueDate}
                     onChange={(e) => setTxDueDate(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-gray-50 border rounded-2xl text-sm"
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-xs font-semibold text-gray-500">
+                  <label className="text-xs font-bold text-slate-600">
                     Avisar no Zap em
                   </label>
                   <input
                     type="date"
                     value={txNotifyDate}
                     onChange={(e) => setTxNotifyDate(e.target.value)}
-                    className="w-full px-3 py-2.5 bg-gray-50 border rounded-2xl text-sm"
+                    className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-sm font-semibold focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                 </div>
               </div>
             )}
             <button
               type="submit"
-              className={`w-full py-3.5 rounded-2xl font-bold text-white ${
+              className={`w-full py-4 rounded-2xl font-extrabold text-white text-sm shadow-lg hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-150 ${
                 txModal.type === "compra"
-                  ? "bg-red-600 hover:bg-red-700"
-                  : "bg-emerald-600 hover:bg-emerald-700"
+                  ? "bg-rose-600 hover:bg-rose-700 shadow-rose-600/25 hover:shadow-rose-600/40"
+                  : "bg-emerald-600 hover:bg-emerald-700 shadow-emerald-600/25 hover:shadow-emerald-600/40"
               }`}
             >
-              Confirmar
+              Confirmar Operação
             </button>
           </form>
         </div>
       )}
 
       {showNewCustomer && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
           <form
             onSubmit={handleAddCustomer}
-            className="bg-white w-full sm:max-w-md rounded-t-[2rem] sm:rounded-3xl p-6 space-y-3"
+            className="bg-white w-full sm:max-w-md rounded-t-[32px] sm:rounded-[32px] p-6 sm:p-7 shadow-2xl border border-slate-100 ring-1 ring-black/5 space-y-3.5"
           >
+            <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto sm:hidden mb-2" />
             <div className="flex justify-between items-center mb-1">
-              <h3 className="font-bold text-lg">Novo Cliente no Fiado</h3>
-              <button type="button" onClick={() => setShowNewCustomer(false)}>
-                <X className="w-5 h-5 text-gray-400" />
+              <div>
+                <h3 className="font-extrabold text-lg text-slate-900">Novo Cliente no Fiado</h3>
+                <p className="text-xs text-slate-500 font-medium">Controle dívidas e receba pelo WhatsApp</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowNewCustomer(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
             <input
@@ -955,7 +1063,7 @@ export default function AdminDashboardPage() {
               placeholder="Nome completo *"
               value={cName}
               onChange={(e) => setCName(e.target.value)}
-              className="w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm"
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-sm font-semibold text-slate-900 placeholder:text-slate-400 shadow-xs focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none transition-all"
               required
             />
             <input
@@ -963,7 +1071,7 @@ export default function AdminDashboardPage() {
               placeholder="WhatsApp com DDD *"
               value={cPhone}
               onChange={(e) => setCPhone(e.target.value)}
-              className="w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm"
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-sm font-semibold text-slate-900 placeholder:text-slate-400 shadow-xs focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none transition-all"
               required
             />
             <input
@@ -971,11 +1079,11 @@ export default function AdminDashboardPage() {
               placeholder="Limite de crédito (R$)"
               value={cLimit}
               onChange={(e) => setCLimit(e.target.value)}
-              className="w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm"
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-sm font-semibold text-slate-900 placeholder:text-slate-400 shadow-xs focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none transition-all"
             />
             <button
               type="submit"
-              className="w-full bg-gray-900 text-white py-3.5 rounded-2xl font-bold text-sm"
+              className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white py-4 rounded-2xl font-extrabold text-sm shadow-lg shadow-emerald-600/25 hover:shadow-emerald-600/40 hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-150"
             >
               Salvar Cliente
             </button>
@@ -984,15 +1092,23 @@ export default function AdminDashboardPage() {
       )}
 
       {showNewProduct && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-end sm:items-center justify-center p-0 sm:p-4">
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
           <form
             onSubmit={handleAddProduct}
-            className="bg-white w-full sm:max-w-md rounded-t-[2rem] sm:rounded-3xl p-6 space-y-3"
+            className="bg-white w-full sm:max-w-md rounded-t-[32px] sm:rounded-[32px] p-6 sm:p-7 shadow-2xl border border-slate-100 ring-1 ring-black/5 space-y-3.5 max-h-[90vh] overflow-y-auto"
           >
+            <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto sm:hidden mb-2" />
             <div className="flex justify-between items-center mb-1">
-              <h3 className="font-bold text-lg">Cadastrar Produto</h3>
-              <button type="button" onClick={() => setShowNewProduct(false)}>
-                <X className="w-5 h-5 text-gray-400" />
+              <div>
+                <h3 className="font-extrabold text-lg text-slate-900">Cadastrar Produto</h3>
+                <p className="text-xs text-slate-500 font-medium">Adicione itens para sua vitrine digital</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowNewProduct(false)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
             <input
@@ -1000,17 +1116,17 @@ export default function AdminDashboardPage() {
               placeholder="Nome do produto *"
               value={pName}
               onChange={(e) => setPName(e.target.value)}
-              className="w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm"
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-sm font-semibold text-slate-900 placeholder:text-slate-400 shadow-xs focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none transition-all"
               required
             />
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2.5">
               <input
                 type="number"
                 step="0.01"
                 placeholder="Preço (R$) *"
                 value={pPrice}
                 onChange={(e) => setPPrice(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm"
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-sm font-semibold text-slate-900 placeholder:text-slate-400 shadow-xs focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none transition-all"
                 required
               />
               <input
@@ -1018,7 +1134,7 @@ export default function AdminDashboardPage() {
                 placeholder="Estoque"
                 value={pStock}
                 onChange={(e) => setPStock(e.target.value)}
-                className="w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm"
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-sm font-semibold text-slate-900 placeholder:text-slate-400 shadow-xs focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none transition-all"
               />
             </div>
             <input
@@ -1026,10 +1142,10 @@ export default function AdminDashboardPage() {
               placeholder="Categoria (ex: Roupas, Doces)"
               value={pCat}
               onChange={(e) => setPCat(e.target.value)}
-              className="w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm"
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-sm font-semibold text-slate-900 placeholder:text-slate-400 shadow-xs focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none transition-all"
             />
             <div className="space-y-2">
-              <label className="text-xs font-semibold text-gray-500 block">
+              <label className="text-xs font-bold text-slate-700 block">
                 Foto do produto (Cloudinary)
               </label>
               <input
@@ -1037,32 +1153,32 @@ export default function AdminDashboardPage() {
                 accept="image/*"
                 onChange={(e) => handleImageUpload(e, setPImg)}
                 disabled={uploadingImg}
-                className="w-full text-xs text-gray-500 file:mr-3 file:py-2 file:px-4 file:rounded-xl file:border-0 file:font-bold file:bg-gray-900 file:text-white hover:file:bg-gray-800"
+                className="w-full text-xs text-slate-500 file:mr-3 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:font-extrabold file:bg-slate-900 file:text-white hover:file:bg-slate-800 file:cursor-pointer transition"
               />
               {uploadingImg && (
-                <p className="text-xs text-emerald-600 font-medium">
-                  Enviando foto...
+                <p className="text-xs text-emerald-600 font-bold animate-pulse">
+                  Enviando foto para Cloudinary...
                 </p>
               )}
               {pImg && (
                 <img
                   src={pImg}
                   alt="Prévia"
-                  className="w-20 h-20 object-cover rounded-xl border"
+                  className="w-20 h-20 object-cover rounded-2xl border border-slate-200 shadow-xs"
                 />
               )}
             </div>
             <textarea
-              placeholder="Descrição curta"
+              placeholder="Descrição curta do produto"
               value={pDesc}
               onChange={(e) => setPDesc(e.target.value)}
               rows={2}
-              className="w-full px-4 py-3 bg-gray-50 border rounded-2xl text-sm"
+              className="w-full px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-sm font-semibold text-slate-900 placeholder:text-slate-400 shadow-xs focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none transition-all"
             />
             <button
               type="submit"
               disabled={uploadingImg}
-              className="w-full bg-gray-900 text-white py-3.5 rounded-2xl font-bold text-sm disabled:opacity-50"
+              className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 disabled:opacity-50 text-white py-4 rounded-2xl font-extrabold text-sm shadow-lg shadow-emerald-600/25 hover:shadow-emerald-600/40 hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-150"
             >
               Salvar Produto
             </button>
@@ -1071,28 +1187,31 @@ export default function AdminDashboardPage() {
       )}
 
       {mpPix && (
-        <div className="fixed inset-0 z-50 bg-black/60 flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-3xl p-6 text-center space-y-4">
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-sm rounded-[32px] p-7 text-center space-y-4 shadow-2xl border border-slate-100 ring-1 ring-black/5">
             <div className="flex justify-between items-center">
-              <h3 className="font-bold text-base">Pagar Fatura meufiadim</h3>
-              <button onClick={() => setMpPix(null)}>
-                <X className="w-5 h-5 text-gray-400" />
+              <h3 className="font-extrabold text-base text-slate-900">Pagar Fatura meufiadim</h3>
+              <button
+                onClick={() => setMpPix(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition"
+              >
+                <X className="w-5 h-5" />
               </button>
             </div>
             <img
               src={`data:image/png;base64,${mpPix.qrCodeBase64}`}
               alt="QR Code Pix"
-              className="w-56 h-56 mx-auto rounded-2xl border p-2"
+              className="w-56 h-56 mx-auto rounded-3xl border border-slate-200/80 p-2 shadow-xs"
             />
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-slate-500 font-medium">
               Assim que o Pix cair, sua loja é liberada automaticamente.
             </p>
             <button
               onClick={() => {
                 navigator.clipboard.writeText(mpPix.qrCode);
-                alert("Código Pix copiado!");
+                alert("Código Pix Copia e Cola copiado!");
               }}
-              className="w-full bg-emerald-600 text-white py-3 rounded-2xl font-bold text-sm"
+              className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white py-3.5 px-4 rounded-2xl font-extrabold text-sm shadow-lg shadow-emerald-600/25 hover:shadow-emerald-600/40 hover:-translate-y-0.5 active:scale-[0.98] transition-all"
             >
               Copiar código Pix
             </button>

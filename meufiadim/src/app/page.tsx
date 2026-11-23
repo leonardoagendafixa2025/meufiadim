@@ -649,69 +649,80 @@ export default function LandingPage() {
         {/* ========================================================================= */}
         <section id="precos" className="max-w-3xl mx-auto text-center space-y-8">
           <div className="space-y-3">
-            <span className="text-xs font-extrabold uppercase tracking-widest text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200/60">
+            <span className="text-xs font-extrabold uppercase tracking-widest text-emerald-800 bg-emerald-50 px-3.5 py-1.5 rounded-full border border-emerald-200/80 shadow-xs">
               Preço Simples e Honesto
             </span>
-            <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900">
-              Sem mensalidade. Só pague quando receber.
+            <h2 className="text-3xl sm:text-4xl font-extrabold text-slate-900 tracking-tight">
+              Sem mensalidade. Só pague quando vender.
             </h2>
-            <p className="text-slate-600 text-base">
+            <p className="text-slate-600 text-base max-w-xl mx-auto">
               Acreditamos que o pequeno comerciante não deve ter custos fixos para modernizar suas vendas.
             </p>
           </div>
 
-          <div className="bg-white rounded-3xl p-8 sm:p-10 border-2 border-emerald-600 shadow-xl relative overflow-hidden text-left space-y-6">
-            <div className="absolute top-0 right-0 bg-emerald-600 text-white text-xs font-extrabold uppercase px-5 py-1.5 rounded-bl-2xl">
+          <div className="group bg-white rounded-[36px] p-8 sm:p-10 border-2 border-emerald-500 shadow-2xl shadow-emerald-500/10 relative overflow-hidden text-left space-y-6 transition-all duration-200 hover:shadow-emerald-500/20">
+            <div className="absolute top-0 right-0 bg-gradient-to-l from-emerald-600 to-emerald-700 text-white text-xs font-extrabold uppercase px-6 py-2 rounded-bl-3xl shadow-sm">
               Plano Único
             </div>
 
             <div>
-              <p className="text-sm font-bold text-slate-400 uppercase tracking-wider">
+              <p className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">
                 Acesso Ilimitado
               </p>
               <div className="flex items-baseline gap-2 mt-1">
-                <span className="text-5xl font-extrabold text-slate-900 tracking-tight">
-                  0 R$
+                <span className="text-5xl sm:text-6xl font-extrabold text-slate-900 tracking-tight">
+                  R$ 0
                 </span>
-                <span className="text-slate-500 font-semibold text-base">
-                  / mensalidade
+                <span className="text-slate-500 font-bold text-base">
+                  / mensalidade fixa
                 </span>
               </div>
-              <p className="text-sm text-emerald-700 font-bold mt-1">
-                + apenas 5% sobre as vendas registradas
+              <p className="text-sm text-emerald-700 font-extrabold mt-1.5 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500" />
+                Apenas 5% sobre as vendas que você registrar e receber
               </p>
             </div>
 
-            <div className="space-y-3 pt-4 border-t border-slate-100 text-sm text-slate-700">
+            <div className="space-y-3.5 pt-4 border-t border-slate-100 text-sm font-semibold text-slate-700">
               <div className="flex items-center gap-3">
-                <Check className="w-5 h-5 text-emerald-600 shrink-0" />
-                <span>Vitrine virtual com link personalizado e logo</span>
+                <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                </div>
+                <span>Vitrine virtual com link personalizado e logo oficial</span>
               </div>
               <div className="flex items-center gap-3">
-                <Check className="w-5 h-5 text-emerald-600 shrink-0" />
+                <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                </div>
                 <span>Caderninho de fiado com limites e saldos ilimitados</span>
               </div>
               <div className="flex items-center gap-3">
-                <Check className="w-5 h-5 text-emerald-600 shrink-0" />
-                <span>Upload de fotos no Cloudinary com entrega rápida</span>
+                <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                </div>
+                <span>Upload de fotos no Cloudinary com carregamento instantâneo</span>
               </div>
               <div className="flex items-center gap-3">
-                <Check className="w-5 h-5 text-emerald-600 shrink-0" />
+                <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                </div>
                 <span>Cobrança automática no WhatsApp com botão Copiar Pix</span>
               </div>
               <div className="flex items-center gap-3">
-                <Check className="w-5 h-5 text-emerald-600 shrink-0" />
-                <span>Instalável no celular como aplicativo (PWA)</span>
+                <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                </div>
+                <span>Instalável no celular como aplicativo nativo (PWA)</span>
               </div>
             </div>
 
             <div className="pt-2">
               <Link
                 href="/login"
-                className="w-full inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white py-4 rounded-2xl font-extrabold text-base shadow-lg shadow-emerald-600/25 transition active:scale-[0.99]"
+                className="group w-full inline-flex items-center justify-center gap-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white py-4 px-6 rounded-2xl font-extrabold text-base shadow-xl shadow-emerald-600/30 hover:shadow-emerald-600/40 hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-150"
               >
-                Começar a usar de graça agora
-                <ArrowRight className="w-5 h-5" />
+                <span>Começar a usar de graça agora</span>
+                <ArrowRight className="w-5 h-5 transition-transform duration-200 group-hover:translate-x-1" />
               </Link>
             </div>
           </div>
@@ -722,10 +733,10 @@ export default function LandingPage() {
         {/* ========================================================================= */}
         <section id="faq" className="max-w-3xl mx-auto space-y-8">
           <div className="text-center space-y-3">
-            <span className="text-xs font-extrabold uppercase tracking-widest text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200/60">
+            <span className="text-xs font-extrabold uppercase tracking-widest text-emerald-800 bg-emerald-50 px-3.5 py-1.5 rounded-full border border-emerald-200/80 shadow-xs">
               Dúvidas Frequentes
             </span>
-            <h2 className="text-3xl font-extrabold text-slate-900">
+            <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">
               Perguntas e Respostas
             </h2>
           </div>
@@ -736,15 +747,15 @@ export default function LandingPage() {
               return (
                 <div
                   key={i}
-                  className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-xs transition"
+                  className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden shadow-xs hover:border-emerald-300 hover:shadow-md transition-all duration-200"
                 >
                   <button
                     onClick={() => setOpenFaq(isOpen ? null : i)}
-                    className="w-full p-5 text-left flex items-center justify-between gap-4 font-bold text-slate-900 hover:text-emerald-600 transition"
+                    className="w-full p-5 text-left flex items-center justify-between gap-4 font-extrabold text-slate-900 hover:text-emerald-700 transition"
                   >
                     <span>{faq.q}</span>
                     <ChevronDown
-                      className={`w-5 h-5 text-slate-400 transition-transform duration-200 ${
+                      className={`w-5 h-5 text-slate-400 shrink-0 transition-transform duration-200 ${
                         isOpen ? "rotate-180 text-emerald-600" : ""
                       }`}
                     />
@@ -757,7 +768,7 @@ export default function LandingPage() {
                         animate={{ opacity: 1, height: "auto" }}
                         exit={{ opacity: 0, height: 0 }}
                         transition={{ duration: 0.2 }}
-                        className="px-5 pb-5 text-sm text-slate-600 leading-relaxed border-t border-slate-50"
+                        className="px-5 pb-5 text-sm text-slate-600 font-medium leading-relaxed border-t border-slate-50"
                       >
                         {faq.a}
                       </motion.div>
@@ -770,35 +781,57 @@ export default function LandingPage() {
         </section>
 
         {/* ========================================================================= */}
-        {/* FINAL CTA                                                                 */}
+        {/* FINAL CTA COM DEGRADÊ EMERALD & MASCOTE                                   */}
         {/* ========================================================================= */}
-        <section className="bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 text-white rounded-3xl p-8 sm:p-14 text-center space-y-6 shadow-2xl relative overflow-hidden">
-          <div className="max-w-2xl mx-auto space-y-4">
-            <div className="flex justify-center mb-2">
-              <img
-                src="/logo.png"
-                alt="meufiadim"
-                className="h-16 w-auto object-contain bg-white/10 rounded-2xl p-2 backdrop-blur-md"
-              />
+        <section className="bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 text-white rounded-[36px] p-8 sm:p-14 text-center space-y-6 shadow-2xl shadow-emerald-700/25 relative overflow-hidden">
+          <div className="max-w-2xl mx-auto space-y-5">
+            <div className="flex justify-center mb-1">
+              <div className="w-20 h-20 bg-white/10 rounded-3xl p-2.5 backdrop-blur-md border border-white/20 shadow-xl flex items-center justify-center">
+                <img
+                  src="/logo.png"
+                  alt="meufiadim"
+                  className="w-full h-full object-contain"
+                />
+              </div>
             </div>
-            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight">
+            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
               Pronto para modernizar suas vendas e nunca mais tomar calote?
             </h2>
-            <p className="text-emerald-100 text-base sm:text-lg">
+            <p className="text-emerald-100 text-base sm:text-lg font-normal">
               Junte-se a centenas de comerciantes que já aposentaram o caderninho de papel.
               Crie sua loja grátis agora mesmo.
             </p>
-            <div className="pt-4 flex flex-col sm:flex-row gap-4 justify-center">
+            <div className="pt-3 flex flex-col sm:flex-row gap-4 justify-center">
               <Link
                 href="/login"
-                className="inline-flex items-center justify-center gap-2 bg-slate-900 hover:bg-slate-800 text-white px-8 py-4 rounded-2xl font-extrabold text-base shadow-xl transition active:scale-95"
+                className="group inline-flex items-center justify-center gap-2.5 bg-slate-900 hover:bg-black text-white px-8 py-4 rounded-2xl font-extrabold text-base shadow-2xl shadow-black/30 hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-150"
               >
-                Criar minha loja agora <ArrowRight className="w-5 h-5" />
+                <span>Criar minha loja agora</span>
+                <ArrowRight className="w-5 h-5 transition-transform duration-200 group-hover:translate-x-1" />
               </Link>
             </div>
           </div>
         </section>
       </main>
+
+      {/* Mobile Sticky Quick Action Bar (Dock inferior móvel para smartphones) */}
+      <div className="sm:hidden fixed bottom-3 inset-x-3 z-30">
+        <div className="bg-slate-900/95 backdrop-blur-xl border border-slate-800 text-white px-4 py-3 rounded-[24px] shadow-2xl shadow-black/40 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <img src="/logo.png" alt="meufiadim" className="h-7 w-auto object-contain shrink-0" />
+            <div className="min-w-0">
+              <p className="text-xs font-extrabold text-white truncate">meufiadim</p>
+              <p className="text-[10px] text-emerald-400 font-semibold truncate">R$ 0 mensalidade</p>
+            </div>
+          </div>
+          <Link
+            href="/login"
+            className="shrink-0 bg-emerald-500 hover:bg-emerald-400 text-white px-4 py-2 rounded-xl font-extrabold text-xs shadow-md shadow-emerald-500/25 active:scale-95 transition"
+          >
+            Criar Loja
+          </Link>
+        </div>
+      </div>
 
       {/* Footer */}
       <footer className="border-t border-slate-200/80 bg-white py-12 px-5">
