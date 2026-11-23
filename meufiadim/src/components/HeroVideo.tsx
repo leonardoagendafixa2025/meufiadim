@@ -8,6 +8,7 @@ export function HeroVideo() {
     <div className="relative mx-auto w-[300px] sm:w-[320px] rounded-[42px] p-2.5 bg-gray-900 shadow-2xl shadow-emerald-900/20 ring-1 ring-gray-800">
       <div className="overflow-hidden rounded-[34px] bg-black">
         <Player
+          acknowledgeRemotionLicense
           component={MeufiadimDemo}
           durationInFrames={240}
           compositionWidth={420}
