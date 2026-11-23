@@ -14,12 +14,9 @@ export default function LandingPage() {
     <div className="min-h-screen bg-[#F7F8FA] flex flex-col">
       <header className="bg-white/80 backdrop-blur border-b border-gray-200 px-5 py-4 sticky top-0 z-20">
         <div className="max-w-6xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-9 h-9 rounded-xl bg-emerald-600 text-white font-extrabold flex items-center justify-center">
-              mf
-            </div>
-            <span className="font-extrabold text-lg tracking-tight">meufiadim</span>
-          </div>
+          <Link href="/" className="flex items-center gap-2">
+            <img src="/logo.png" alt="meufiadim" className="h-10 w-auto object-contain" />
+          </Link>
           <div className="flex items-center gap-2">
             <Link
               href="/login"

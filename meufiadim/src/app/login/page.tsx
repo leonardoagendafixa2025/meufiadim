@@ -33,17 +33,29 @@ export default function LoginPage() {
 
         if (data.user) {
           const slug = makeSlug(storeName) || `loja-${Date.now()}`;
-          const { error: storeErr } = await supabase.from("stores").insert({
-            owner_id: data.user.id,
-            name: storeName.trim(),
-            slug,
-            whatsapp: whatsapp.replace(/\D/g, ""),
+          const res = await fetch("/api/auth/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              userId: data.user.id,
+              storeName: storeName.trim(),
+              slug,
+              whatsapp,
+            }),
           });
-          if (storeErr) throw storeErr;
+          const resData = await res.json();
+          if (!res.ok) {
+            throw new Error(resData.error || "Erro ao registrar a loja.");
+          }
         }
 
-        alert("Loja criada com sucesso!");
-        router.push("/admin");
+        if (data.session) {
+          alert("Loja criada com sucesso!");
+          router.push("/admin");
+        } else {
+          alert("Cadastro realizado! Se o Supabase exigir confirmação por e-mail, verifique sua caixa de entrada, ou faça login com suas credenciais.");
+          setIsSignUp(false);
+        }
       } else {
         const { data, error } = await supabase.auth.signInWithPassword({
           email,
@@ -68,10 +80,7 @@ export default function LoginPage() {
     <div className="min-h-screen flex items-center justify-center bg-[#F7F8FA] px-4">
       <div className="w-full max-w-md bg-white p-7 rounded-3xl border border-gray-100 shadow-sm space-y-5">
         <div className="text-center">
-          <div className="w-12 h-12 rounded-2xl bg-emerald-600 text-white font-extrabold text-lg flex items-center justify-center mx-auto mb-3">
-            mf
-          </div>
-          <h1 className="text-2xl font-extrabold text-gray-900">meufiadim</h1>
+          <img src="/logo.png" alt="meufiadim" className="h-20 w-auto object-contain mx-auto mb-2" />
           <p className="text-sm text-gray-500 mt-1">
             {isSignUp
               ? "Crie sua loja grátis — pague só % sobre o que vender"

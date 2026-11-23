@@ -53,7 +53,10 @@ export default function SuperAdminPage() {
   return (
     <div className="min-h-screen bg-[#F7F8FA] p-6">
       <div className="max-w-5xl mx-auto space-y-6">
-        <h1 className="text-2xl font-extrabold">SuperAdmin — meufiadim</h1>
+        <div className="flex items-center gap-3">
+          <img src="/logo.png" alt="meufiadim" className="h-10 w-auto object-contain" />
+          <h1 className="text-2xl font-extrabold">SuperAdmin</h1>
+        </div>
 
         <div className="bg-white rounded-3xl border border-gray-100 shadow-sm divide-y">
           {stores.map((s) => (

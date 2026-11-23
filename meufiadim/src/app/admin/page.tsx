@@ -147,7 +147,7 @@ export default function AdminDashboardPage() {
       .from("stores")
       .select("*")
       .eq("owner_id", user.id)
-      .single();
+      .maybeSingle();
 
     if (!storeData) {
       router.push("/login");
@@ -418,11 +418,14 @@ export default function AdminDashboardPage() {
       <header className="bg-gradient-to-br from-gray-900 via-gray-900 to-emerald-950 text-white pt-6 pb-10 px-5 rounded-b-[2rem] shadow-lg">
         <div className="max-w-3xl mx-auto">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs text-emerald-400 font-semibold uppercase tracking-wider">
-                meufiadim • Painel
-              </p>
-              <h1 className="text-xl font-bold mt-0.5">{store.name}</h1>
+            <div className="flex items-center gap-3">
+              <img src="/logo.png" alt="meufiadim" className="h-10 w-auto object-contain bg-white/10 rounded-xl p-1" />
+              <div>
+                <p className="text-xs text-emerald-400 font-semibold uppercase tracking-wider">
+                  meufiadim • Painel
+                </p>
+                <h1 className="text-xl font-bold mt-0.5">{store.name}</h1>
+              </div>
             </div>
 
             <div className="flex items-center gap-2">

@@ -597,6 +597,11 @@ export default function TenantStorePage() {
           </div>
         </div>
       )}
+
+      <footer className="py-8 text-center text-xs text-gray-400 flex items-center justify-center gap-2">
+        <span>Tecnologia</span>
+        <img src="/logo.png" alt="meufiadim" className="h-5 w-auto inline-block" />
+      </footer>
     </div>
   );
 }
