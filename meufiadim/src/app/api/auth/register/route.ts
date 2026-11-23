@@ -1,14 +1,15 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 
-// Client administrativo com service_role para criar a loja com segurança
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+function getSupabaseAdmin() {
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "https://placeholder.supabase.co";
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || "placeholder-service-key";
+  return createClient(url, key);
+}
 
 export async function POST(req: Request) {
   try {
+    const supabaseAdmin = getSupabaseAdmin();
     const body = await req.json();
     const { userId, storeName, slug, whatsapp } = body;
 
@@ -19,7 +20,7 @@ export async function POST(req: Request) {
       );
     }
 
-    // Verifica se já existe loja com esse slug
+    // Verifica se ja existe loja com esse slug
     const { data: existing } = await supabaseAdmin
       .from("stores")
       .select("id")
