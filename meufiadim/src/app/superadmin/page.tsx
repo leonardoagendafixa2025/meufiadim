@@ -1,6 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
+import { ArrowLeft, Shield, Store, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 interface StoreRow {
@@ -11,20 +13,34 @@ interface StoreRow {
   commission_rate: number;
   billing_cycle: "weekly" | "monthly";
   status: "active" | "blocked";
+  created_at?: string;
 }
 
 export default function SuperAdminPage() {
   const [stores, setStores] = useState<StoreRow[]>([]);
   const [authorized, setAuthorized] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [savingId, setSavingId] = useState<string | null>(null);
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
   useEffect(() => {
     async function init() {
       const {
         data: { user },
       } = await supabase.auth.getUser();
-      if (user?.email !== process.env.NEXT_PUBLIC_SUPERADMIN_EMAIL) return;
+
+      const superEmail = (
+        process.env.NEXT_PUBLIC_SUPERADMIN_EMAIL || "toyesterdayagencia@gmail.com"
+      ).toLowerCase().trim();
+
+      if (user?.email?.toLowerCase().trim() !== superEmail) {
+        setLoading(false);
+        return;
+      }
+
       setAuthorized(true);
-      loadStores();
+      await loadStores();
+      setLoading(false);
     }
     init();
   }, []);
@@ -37,93 +53,214 @@ export default function SuperAdminPage() {
     setStores(data || []);
   }
 
+  function showNotification(msg: string) {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3000);
+  }
+
   async function updateStore(id: string, patch: Partial<StoreRow>) {
-    await supabase.from("stores").update(patch).eq("id", id);
-    loadStores();
+    try {
+      setSavingId(id);
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+
+      if (!session) {
+        alert("Sessão expirada. Faça login novamente.");
+        return;
+      }
+
+      const res = await fetch("/api/superadmin/store", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify({ storeId: id, patch }),
+      });
+
+      const result = await res.json();
+
+      if (!res.ok) {
+        throw new Error(result.error || "Falha ao atualizar loja.");
+      }
+
+      showNotification("Loja atualizada com sucesso!");
+      await loadStores();
+    } catch (err: any) {
+      alert(`Erro: ${err.message}`);
+    } finally {
+      setSavingId(null);
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-6">
+        <div className="flex items-center gap-3 bg-white px-6 py-4 rounded-2xl shadow-sm border border-slate-200">
+          <RefreshCw className="w-5 h-5 text-emerald-600 animate-spin" />
+          <p className="text-sm font-bold text-slate-700">Verificando credenciais de SuperAdmin...</p>
+        </div>
+      </div>
+    );
   }
 
   if (!authorized) {
     return (
-      <div className="p-10 text-center text-gray-600">
-        Acesso restrito ao administrador da plataforma.
+      <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center p-6 text-center">
+        <div className="bg-white p-8 rounded-3xl shadow-sm border border-slate-200/80 max-w-md w-full space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto">
+            <AlertCircle className="w-6 h-6 stroke-[2]" />
+          </div>
+          <h2 className="text-xl font-extrabold text-slate-900">Acesso Restrito</h2>
+          <p className="text-sm text-slate-500">
+            Esta área é reservada exclusivamente para a administração central da plataforma <strong>meufiadim</strong>.
+          </p>
+          <Link
+            href="/admin"
+            className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-sm transition"
+          >
+            Voltar ao Meu Painel
+          </Link>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 p-6 sm:p-8">
+    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 p-4 sm:p-8">
       <div className="max-w-5xl mx-auto space-y-6">
-        <div className="flex items-center gap-3.5 bg-white p-4 sm:p-5 rounded-3xl border border-slate-200/70 shadow-sm shadow-slate-200/50">
-          <img src="/logo.png" alt="meufiadim" className="h-11 w-auto object-contain" />
-          <div>
-            <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-purple-100 text-purple-800">
-              Gestão Global
-            </span>
-            <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-0.5">SuperAdmin — Lojas da Plataforma</h1>
+        {/* Toast Notificação */}
+        {toastMsg && (
+          <div className="fixed top-6 right-6 z-50 flex items-center gap-2 bg-emerald-600 text-white text-xs font-extrabold px-4 py-3 rounded-2xl shadow-xl animate-bounce">
+            <CheckCircle2 className="w-4 h-4" />
+            {toastMsg}
+          </div>
+        )}
+
+        {/* Header do SuperAdmin */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 sm:p-6 rounded-3xl border border-slate-200/70 shadow-sm shadow-slate-200/50">
+          <div className="flex items-center gap-3.5">
+            <img src="/logo.png" alt="meufiadim" className="h-11 w-auto object-contain" />
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-extrabold uppercase px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200/60">
+                  <Shield className="w-3 h-3 inline mr-1" />
+                  SuperAdmin
+                </span>
+                <span className="text-xs text-slate-400 font-semibold">• {stores.length} lojas registradas</span>
+              </div>
+              <h1 className="text-xl sm:text-2xl font-extrabold text-slate-900 mt-1">
+                Gestão Global de Lojas
+              </h1>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-3">
+            <Link
+              href="/admin"
+              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-extrabold transition-all duration-150 active:scale-95"
+            >
+              <Store className="w-4 h-4 text-emerald-600" />
+              Meu Painel Lojista
+            </Link>
           </div>
         </div>
 
+        {/* Lista de Lojas */}
         <div className="bg-white rounded-[32px] border border-slate-200/70 shadow-sm shadow-slate-200/50 divide-y divide-slate-100 overflow-hidden">
-          {stores.map((s) => (
-            <div
-              key={s.id}
-              className="p-5 sm:p-6 flex flex-wrap items-center justify-between gap-4 hover:bg-slate-50/70 transition-colors"
-            >
-              <div>
-                <p className="font-extrabold text-base text-slate-900">{s.name}</p>
-                <p className="text-xs text-slate-500 font-medium mt-0.5">
-                  Slug: <strong className="text-slate-800">/{s.slug}</strong> • WhatsApp: {s.whatsapp}
-                </p>
-              </div>
+          {stores.length === 0 ? (
+            <div className="p-12 text-center text-slate-400 text-sm">
+              Nenhuma loja cadastrada na plataforma ainda.
+            </div>
+          ) : (
+            stores.map((s) => (
+              <div
+                key={s.id}
+                className="p-5 sm:p-6 flex flex-wrap items-center justify-between gap-4 hover:bg-slate-50/70 transition-colors"
+              >
+                <div>
+                  <div className="flex items-center gap-2">
+                    <p className="font-extrabold text-base text-slate-900">{s.name}</p>
+                    <span
+                      className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md ${
+                        s.status === "active"
+                          ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                          : "bg-rose-50 text-rose-700 border border-rose-200"
+                      }`}
+                    >
+                      {s.status === "active" ? "Ativa" : "Bloqueada"}
+                    </span>
+                  </div>
+                  <p className="text-xs text-slate-500 font-medium mt-1">
+                    Slug:{" "}
+                    <a
+                      href={`/${s.slug}`}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="text-emerald-700 font-extrabold hover:underline"
+                    >
+                      /{s.slug}
+                    </a>{" "}
+                    • WhatsApp: {s.whatsapp || "Não cadastrado"}
+                  </p>
+                </div>
 
-              <div className="flex flex-wrap items-center gap-3">
-                <label className="text-xs font-bold text-slate-600 flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/60">
-                  Taxa (%):
-                  <input
-                    type="number"
-                    step="0.5"
-                    defaultValue={s.commission_rate}
-                    onBlur={(e) =>
+                <div className="flex flex-wrap items-center gap-3">
+                  <label className="text-xs font-bold text-slate-600 flex items-center gap-1.5 bg-slate-50 px-3 py-1.5 rounded-xl border border-slate-200/60">
+                    Comissão (%):
+                    <input
+                      type="number"
+                      step="0.5"
+                      disabled={savingId === s.id}
+                      defaultValue={s.commission_rate}
+                      onBlur={(e) => {
+                        const val = Number(e.target.value);
+                        if (val !== s.commission_rate) {
+                          updateStore(s.id, { commission_rate: val });
+                        }
+                      }}
+                      className="w-16 px-2 py-1 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    />
+                  </label>
+
+                  <select
+                    value={s.billing_cycle}
+                    disabled={savingId === s.id}
+                    onChange={(e) =>
                       updateStore(s.id, {
-                        commission_rate: Number(e.target.value),
+                        billing_cycle: e.target.value as "weekly" | "monthly",
                       })
                     }
-                    className="w-16 px-2 py-1 bg-white border border-slate-200 rounded-lg text-sm font-bold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                  />
-                </label>
+                    className="px-3 py-2 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  >
+                    <option value="weekly">Ciclo Semanal</option>
+                    <option value="monthly">Ciclo Mensal</option>
+                  </select>
 
-                <select
-                  value={s.billing_cycle}
-                  onChange={(e) =>
-                    updateStore(s.id, {
-                      billing_cycle: e.target.value as "weekly" | "monthly",
-                    })
-                  }
-                  className="px-3 py-2 bg-slate-50 border border-slate-200/80 rounded-xl text-xs font-bold text-slate-700 focus:outline-none focus:ring-2 focus:ring-emerald-500"
-                >
-                  <option value="weekly">Semanal</option>
-                  <option value="monthly">Mensal</option>
-                </select>
-
-                <button
-                  onClick={() =>
-                    updateStore(s.id, {
-                      status: s.status === "active" ? "blocked" : "active",
-                    })
-                  }
-                  className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all duration-150 hover:-translate-y-0.5 active:scale-95 shadow-xs ${
-                    s.status === "active"
-                      ? "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/80"
-                      : "bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-200/80"
-                  }`}
-                >
-                  {s.status === "active"
-                    ? "✓ Ativa (Bloquear)"
-                    : "✕ Bloqueada (Liberar)"}
-                </button>
+                  <button
+                    onClick={() =>
+                      updateStore(s.id, {
+                        status: s.status === "active" ? "blocked" : "active",
+                      })
+                    }
+                    disabled={savingId === s.id}
+                    className={`px-3.5 py-2 rounded-xl text-xs font-extrabold transition-all duration-150 hover:-translate-y-0.5 active:scale-95 shadow-xs disabled:opacity-50 ${
+                      s.status === "active"
+                        ? "bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200/80"
+                        : "bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200/80"
+                    }`}
+                  >
+                    {savingId === s.id
+                      ? "Salvando..."
+                      : s.status === "active"
+                      ? "Bloquear Loja"
+                      : "Desbloquear Loja"}
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          )}
         </div>
       </div>
     </div>
