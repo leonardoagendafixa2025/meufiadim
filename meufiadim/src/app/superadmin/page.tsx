@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, Shield, Store, RefreshCw, CheckCircle2, AlertCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, Shield, Store, RefreshCw, CheckCircle2, AlertCircle, LogIn, LogOut } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 interface StoreRow {
@@ -17,11 +18,13 @@ interface StoreRow {
 }
 
 export default function SuperAdminPage() {
+  const router = useRouter();
   const [stores, setStores] = useState<StoreRow[]>([]);
   const [authorized, setAuthorized] = useState(false);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [toastMsg, setToastMsg] = useState<string | null>(null);
+  const [currentEmail, setCurrentEmail] = useState<string | null>(null);
 
   useEffect(() => {
     async function init() {
@@ -29,11 +32,18 @@ export default function SuperAdminPage() {
         data: { user },
       } = await supabase.auth.getUser();
 
+      if (!user) {
+        setLoading(false);
+        return;
+      }
+
+      setCurrentEmail(user.email || null);
+
       const superEmail = (
         process.env.NEXT_PUBLIC_SUPERADMIN_EMAIL || "toyesterdayagencia@gmail.com"
       ).toLowerCase().trim();
 
-      if (user?.email?.toLowerCase().trim() !== superEmail) {
+      if (user.email?.toLowerCase().trim() !== superEmail) {
         setLoading(false);
         return;
       }
@@ -94,6 +104,11 @@ export default function SuperAdminPage() {
     }
   }
 
+  async function handleSwitchAccount() {
+    await supabase.auth.signOut();
+    router.push("/login");
+  }
+
   if (loading) {
     return (
       <div className="min-h-screen bg-[#F8FAFC] flex items-center justify-center p-6">
@@ -113,15 +128,51 @@ export default function SuperAdminPage() {
             <AlertCircle className="w-6 h-6 stroke-[2]" />
           </div>
           <h2 className="text-xl font-extrabold text-slate-900">Acesso Restrito</h2>
-          <p className="text-sm text-slate-500">
-            Esta área é reservada exclusivamente para a administração central da plataforma <strong>meufiadim</strong>.
-          </p>
-          <Link
-            href="/admin"
-            className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-sm transition"
-          >
-            Voltar ao Meu Painel
-          </Link>
+
+          {currentEmail ? (
+            <div className="space-y-2">
+              <p className="text-sm text-slate-500">
+                Você está conectado como:
+              </p>
+              <p className="text-xs font-mono font-bold bg-slate-100 py-1.5 px-3 rounded-xl text-slate-800 break-all">
+                {currentEmail}
+              </p>
+              <p className="text-xs text-rose-600 font-semibold pt-1">
+                Esta conta não é o SuperAdmin da plataforma.
+              </p>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">
+              Você precisa estar conectado com a conta de SuperAdmin (<strong>toyesterdayagencia@gmail.com</strong>) para acessar esta área.
+            </p>
+          )}
+
+          <div className="pt-2 space-y-2">
+            {currentEmail ? (
+              <button
+                onClick={handleSwitchAccount}
+                className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-sm transition"
+              >
+                <LogOut className="w-4 h-4" />
+                Sair e Conectar como SuperAdmin
+              </button>
+            ) : (
+              <Link
+                href="/login"
+                className="inline-flex items-center justify-center gap-2 w-full py-3 px-4 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-sm transition"
+              >
+                <LogIn className="w-4 h-4" />
+                Fazer Login como SuperAdmin
+              </Link>
+            )}
+
+            <Link
+              href="/admin"
+              className="inline-flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs transition"
+            >
+              Voltar ao Meu Painel
+            </Link>
+          </div>
         </div>
       </div>
     );

@@ -73,7 +73,11 @@ export default function LoginPage() {
         });
         if (error) throw error;
 
-        if (data.user?.email === process.env.NEXT_PUBLIC_SUPERADMIN_EMAIL) {
+        const superEmail = (
+          process.env.NEXT_PUBLIC_SUPERADMIN_EMAIL || "toyesterdayagencia@gmail.com"
+        ).toLowerCase().trim();
+
+        if (data.user?.email?.toLowerCase().trim() === superEmail) {
           router.push("/superadmin");
         } else {
           router.push("/admin");
