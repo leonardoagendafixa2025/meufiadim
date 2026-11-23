@@ -171,10 +171,12 @@ export default function AdminDashboardPage() {
     }
 
     setStore(storeData);
-    const superEmail = (
-      process.env.NEXT_PUBLIC_SUPERADMIN_EMAIL || "toyesterdayagencia@gmail.com"
-    ).toLowerCase().trim();
-    setIsSuperAdmin(user.email?.toLowerCase().trim() === superEmail);
+    const email = (user.email || "").toLowerCase().trim();
+    const superAdmins = [
+      "toyesterdayagencia@gmail.com",
+      (process.env.NEXT_PUBLIC_SUPERADMIN_EMAIL || "").toLowerCase().trim(),
+    ].filter(Boolean);
+    setIsSuperAdmin(superAdmins.includes(email));
     setPixKey(storeData.pix_key || "");
     setPixCity(storeData.pix_city || "BRASILIA");
     setLogoUrl(storeData.logo_url || "");

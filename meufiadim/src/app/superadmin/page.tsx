@@ -39,11 +39,13 @@ export default function SuperAdminPage() {
 
       setCurrentEmail(user.email || null);
 
-      const superEmail = (
-        process.env.NEXT_PUBLIC_SUPERADMIN_EMAIL || "toyesterdayagencia@gmail.com"
-      ).toLowerCase().trim();
+      const email = (user.email || "").toLowerCase().trim();
+      const superAdmins = [
+        "toyesterdayagencia@gmail.com",
+        (process.env.NEXT_PUBLIC_SUPERADMIN_EMAIL || "").toLowerCase().trim(),
+      ].filter(Boolean);
 
-      if (user.email?.toLowerCase().trim() !== superEmail) {
+      if (!superAdmins.includes(email)) {
         setLoading(false);
         return;
       }

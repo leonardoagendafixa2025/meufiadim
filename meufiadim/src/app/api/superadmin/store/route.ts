@@ -21,17 +21,13 @@ export async function PATCH(req: Request) {
       error: authError,
     } = await supabaseAdmin.auth.getUser(token);
 
-    const superAdminEmail = (
-      process.env.NEXT_PUBLIC_SUPERADMIN_EMAIL || "toyesterdayagencia@gmail.com"
-    )
-      .toLowerCase()
-      .trim();
+    const userEmail = (user?.email || "").toLowerCase().trim();
+    const superAdmins = [
+      "toyesterdayagencia@gmail.com",
+      (process.env.NEXT_PUBLIC_SUPERADMIN_EMAIL || "").toLowerCase().trim(),
+    ].filter(Boolean);
 
-    if (
-      authError ||
-      !user ||
-      user.email?.toLowerCase().trim() !== superAdminEmail
-    ) {
+    if (authError || !user || !superAdmins.includes(userEmail)) {
       return NextResponse.json(
         { error: "Acesso negado. Apenas o SuperAdmin pode alterar lojas." },
         { status: 403 }
