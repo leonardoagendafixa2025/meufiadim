@@ -313,7 +313,7 @@ cron.schedule("0 9 * * *", async () => {
   }
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 API Baileys rodando na porta ${PORT}`);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`🚀 API Baileys rodando em 0.0.0.0:${PORT}`);
   connectToWhatsApp();
 });

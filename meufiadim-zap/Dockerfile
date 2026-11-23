@@ -11,7 +11,6 @@ COPY . .
 RUN mkdir -p /app/auth_info
 
 EXPOSE 3001
-
-ENV PORT=3001
+EXPOSE 8080
 
 CMD ["node", "index.js"]
