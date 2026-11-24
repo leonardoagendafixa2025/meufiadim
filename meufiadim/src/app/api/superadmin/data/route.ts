@@ -161,6 +161,7 @@ export async function GET(req: Request) {
       pix_city: meta.pix_city || "BRASILIA",
       whatsapp: meta.whatsapp || "",
     };
+    const campaigns = meta.campaigns_history || [];
 
     return NextResponse.json({
       stats: {
@@ -177,6 +178,7 @@ export async function GET(req: Request) {
       stores: enrichedStores,
       invoices,
       settings,
+      campaigns,
     });
   } catch (err: any) {
     return NextResponse.json(
