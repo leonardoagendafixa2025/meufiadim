@@ -1,5 +1,6 @@
 require("dotenv").config();
 const fs = require("fs");
+const path = require("path");
 const http = require("http");
 const express = require("express");
 const cron = require("node-cron");
@@ -41,10 +42,83 @@ app.use((req, res, next) => {
 const MAIN_PORT = parseInt(process.env.PORT || "8080", 10);
 const API_KEY = process.env.API_KEY || "minha-chave-secreta-meufiadim";
 
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
 const supabase =
-  process.env.SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY
-    ? createClient(process.env.SUPABASE_URL, process.env.SUPABASE_SERVICE_ROLE_KEY)
+  SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY
+    ? createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
     : null;
+
+const AUTH_DIR = path.resolve("./auth_info");
+const BUCKET = "whatsapp-session";
+
+// 1. Restaura a sessão do Supabase Storage no boot
+async function restoreSessionFromSupabase() {
+  if (!supabase) return;
+  try {
+    console.log("🔄 Verificando sessão salva no Supabase Storage...");
+    const { data: files, error } = await supabase.storage.from(BUCKET).list();
+    if (error || !files || files.length === 0) {
+      console.log("ℹ️ Nenhuma sessão anterior encontrada no Supabase. Aguardando novo QR Code...");
+      return;
+    }
+
+    if (!fs.existsSync(AUTH_DIR)) {
+      fs.mkdirSync(AUTH_DIR, { recursive: true });
+    }
+
+    for (const file of files) {
+      if (!file.name || file.name === ".emptyFolderPlaceholder") continue;
+      const { data, error: dlErr } = await supabase.storage.from(BUCKET).download(file.name);
+      if (data && !dlErr) {
+        const buffer = Buffer.from(await data.arrayBuffer());
+        fs.writeFileSync(path.join(AUTH_DIR, file.name), buffer);
+      }
+    }
+    console.log(`✅ Sessão restaurada com sucesso (${files.length} arquivos sincronizados)!`);
+  } catch (err) {
+    console.warn("⚠️ Aviso ao restaurar sessão:", err?.message || err);
+  }
+}
+
+// 2. Salva todos os arquivos de sessão no Supabase Storage (com debounce)
+let syncTimeout = null;
+function scheduleSessionBackup() {
+  if (!supabase) return;
+  if (syncTimeout) clearTimeout(syncTimeout);
+  syncTimeout = setTimeout(async () => {
+    try {
+      if (!fs.existsSync(AUTH_DIR)) return;
+      const files = fs.readdirSync(AUTH_DIR);
+      for (const fileName of files) {
+        const filePath = path.join(AUTH_DIR, fileName);
+        if (fs.statSync(filePath).isFile()) {
+          const content = fs.readFileSync(filePath);
+          await supabase.storage.from(BUCKET).upload(fileName, content, { upsert: true });
+        }
+      }
+      console.log("☁️ Sessão sincronizada no Supabase Storage com sucesso!");
+    } catch (err) {
+      console.warn("⚠️ Falha ao fazer backup da sessão:", err?.message || err);
+    }
+  }, 2500);
+}
+
+// 3. Limpa a sessão no Supabase quando desconectar
+async function clearSessionFromSupabase() {
+  if (!supabase) return;
+  try {
+    const { data: files } = await supabase.storage.from(BUCKET).list();
+    if (files && files.length > 0) {
+      const fileNames = files.map((f) => f.name).filter(Boolean);
+      await supabase.storage.from(BUCKET).remove(fileNames);
+    }
+    console.log("🗑️ Sessão apagada do Supabase Storage com sucesso.");
+  } catch (err) {
+    console.warn("⚠️ Falha ao limpar sessão no Supabase:", err?.message || err);
+  }
+}
 
 let sock = null;
 let isConnected = false;
@@ -52,7 +126,9 @@ let latestQR = null;
 
 async function connectToWhatsApp() {
   try {
-    const { state, saveCreds } = await useMultiFileAuthState("./auth_info");
+    await restoreSessionFromSupabase();
+
+    const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR);
     
     // Versão padrão segura caso a chamada de rede falhe
     let version = [2, 3000, 1015901307];
@@ -70,9 +146,12 @@ async function connectToWhatsApp() {
       printQRInTerminal: false,
     });
 
-    sock.ev.on("creds.update", saveCreds);
+    sock.ev.on("creds.update", async () => {
+      await saveCreds();
+      scheduleSessionBackup();
+    });
 
-    sock.ev.on("connection.update", (update) => {
+    sock.ev.on("connection.update", async (update) => {
       const { connection, lastDisconnect, qr } = update;
 
       if (qr) {
@@ -93,14 +172,16 @@ async function connectToWhatsApp() {
         } else {
           console.log("Sessão desconectada/expirada. Limpando auth_info para novo QR...");
           try {
-            fs.rmSync("./auth_info", { recursive: true, force: true });
+            fs.rmSync(AUTH_DIR, { recursive: true, force: true });
           } catch (e) {}
+          await clearSessionFromSupabase();
           setTimeout(connectToWhatsApp, 3000);
         }
       } else if (connection === "open") {
         isConnected = true;
         latestQR = null;
         console.log("✅ WhatsApp conectado e pronto para enviar cobranças!");
+        scheduleSessionBackup();
       }
     });
   } catch (err) {
@@ -168,8 +249,9 @@ app.post("/api/disconnect", async (req, res) => {
     isConnected = false;
     latestQR = null;
     try {
-      fs.rmSync("./auth_info", { recursive: true, force: true });
+      fs.rmSync(AUTH_DIR, { recursive: true, force: true });
     } catch (e) {}
+    await clearSessionFromSupabase();
     setTimeout(connectToWhatsApp, 2000);
     return res.json({ ok: true });
   } catch (err) {
