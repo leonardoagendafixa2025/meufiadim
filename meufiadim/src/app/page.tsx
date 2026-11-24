@@ -99,7 +99,7 @@ export default function LandingPage() {
     },
     {
       q: "Existe alguma mensalidade ou taxa fixa?",
-      a: "Não cobramos nenhuma mensalidade fixa. Nosso modelo é ganha-ganha: cobramos apenas uma pequena porcentagem (5%) sobre o valor das vendas que você registrar na plataforma. Se você não vender, não paga nada.",
+      a: "Não cobramos nenhuma mensalidade fixa. Nosso modelo é ganha-ganha: cobramos apenas uma pequena porcentagem (10%) sobre o valor das vendas que você registrar na plataforma. Se você não vender, não paga nada.",
     },
     {
       q: "O meufiadim funciona no celular?",
@@ -114,7 +114,7 @@ export default function LandingPage() {
   // Cálculos do simulador
   const recuperacaoEstimada = Math.round(fiadoMensal * 0.94);
   const horasEconomizadas = Math.round((fiadoMensal / 300) * 1.5);
-  const taxaPlataforma = Math.round(fiadoMensal * 0.05);
+  const taxaPlataforma = Math.round(fiadoMensal * 0.10);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans selection:bg-emerald-500 selection:text-white">
@@ -546,7 +546,7 @@ export default function LandingPage() {
 
             <div className="bg-slate-50 border border-slate-200/70 rounded-2xl p-5 space-y-1">
               <p className="text-xs text-slate-600 font-bold uppercase">
-                Taxa da Plataforma (5%)
+                Taxa da Plataforma (10%)
               </p>
               <p className="text-2xl sm:text-3xl font-extrabold text-slate-900">
                 R$ {taxaPlataforma.toLocaleString("pt-BR")}
@@ -679,7 +679,7 @@ export default function LandingPage() {
               </div>
               <p className="text-sm text-emerald-700 font-extrabold mt-1.5 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                Apenas 5% sobre as vendas que você registrar e receber
+                Apenas 10% sobre as vendas que você registrar e receber
               </p>
             </div>
 
