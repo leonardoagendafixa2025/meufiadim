@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { canMerchantAccessSystem } from "@/lib/infinitepay";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +67,22 @@ export async function POST(req: Request) {
 
     if (authError || !user) {
       return NextResponse.json({ error: "Usuário não autenticado." }, { status: 401 });
+    }
+
+    const { data: merchantStore } = await supabaseAdmin
+      .from("stores")
+      .select("id")
+      .eq("owner_id", user.id)
+      .maybeSingle();
+
+    if (merchantStore) {
+      const accessCheck = await canMerchantAccessSystem(merchantStore.id);
+      if (!accessCheck.allowed) {
+        return NextResponse.json(
+          { error: accessCheck.reason || "Operação bloqueada por pendência financeira." },
+          { status: 403 }
+        );
+      }
     }
 
     const body = await req.json();

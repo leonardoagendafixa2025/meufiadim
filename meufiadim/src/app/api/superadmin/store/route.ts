@@ -61,6 +61,12 @@ export async function PATCH(req: Request) {
       }
     }
 
+    if (filteredPatch.status === "blocked") {
+      filteredPatch.admin_blocked = true;
+    } else if (filteredPatch.status === "active") {
+      filteredPatch.admin_blocked = false;
+    }
+
     const { data, error } = await supabaseAdmin
       .from("stores")
       .update(filteredPatch)
@@ -72,7 +78,20 @@ export async function PATCH(req: Request) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
-    return NextResponse.json({ ok: true, store: data });
+    // Reavaliar bloqueio caso tenha havido alteração de status administrativo
+    if (filteredPatch.status) {
+      await supabaseAdmin.rpc("reevaluate_merchant_access", {
+        p_merchant_id: storeId,
+      });
+    }
+
+    const { data: refreshed } = await supabaseAdmin
+      .from("stores")
+      .select("*")
+      .eq("id", storeId)
+      .single();
+
+    return NextResponse.json({ ok: true, store: refreshed || data });
   } catch (err: any) {
     return NextResponse.json(
       { error: err.message || "Erro interno" },

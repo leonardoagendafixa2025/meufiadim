@@ -45,9 +45,11 @@ import {
   Bold,
   Italic,
   History,
+  CreditCard,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { formatBRL } from "@/lib/whatsapp";
+import { SuperAdminChargesTab } from "@/components/superadmin/SuperAdminChargesTab";
 
 interface StoreMetrics {
   customersCount: number;
@@ -174,7 +176,7 @@ export default function SuperAdminPage() {
 
   // Abas
   const [activeTab, setActiveTab] = useState<
-    "overview" | "stores" | "campaigns" | "whatsapp" | "invoices"
+    "overview" | "stores" | "campaigns" | "whatsapp" | "invoices" | "charges"
   >("stores");
 
   // Filtros de Lojas
@@ -1225,6 +1227,18 @@ export default function SuperAdminPage() {
           >
             <Receipt className="w-4 h-4" />
             <span>Faturas & Comissão ({invoices.length})</span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab("charges")}
+            className={`flex-1 min-w-[160px] py-2.5 px-4 rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 transition-all duration-150 ${
+              activeTab === "charges"
+                ? "bg-purple-600 text-white shadow-md shadow-purple-600/25"
+                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+            }`}
+          >
+            <CreditCard className="w-4 h-4" />
+            <span>Financeiro → Cobranças</span>
           </button>
         </div>
 
@@ -2487,6 +2501,16 @@ export default function SuperAdminPage() {
               </form>
             </div>
           </div>
+        )}
+
+        {/* ============================================================================== */}
+        {/* ABA: FINANCEIRO -> COBRANÇAS DOS LOJISTAS (INFINITEPAY) */}
+        {/* ============================================================================== */}
+        {activeTab === "charges" && (
+          <SuperAdminChargesTab
+            stores={stores}
+            onRefreshStores={loadPlatformData}
+          />
         )}
 
         {/* ============================================================================== */}

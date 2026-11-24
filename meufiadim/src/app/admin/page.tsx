@@ -38,6 +38,7 @@ import {
   Tag,
   CalendarClock,
   History,
+  CreditCard,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { formatBRL } from "@/lib/whatsapp";
@@ -55,6 +56,10 @@ import { EncomendasTab } from "@/components/EncomendasTab";
 import { NewEncomendaModal } from "@/components/NewEncomendaModal";
 import { EncomendaDetailsModal } from "@/components/EncomendaDetailsModal";
 import { CustomerHistoryModal } from "@/components/CustomerHistoryModal";
+import {
+  MerchantChargesTab,
+  type MerchantChargeItem,
+} from "@/components/admin/MerchantChargesTab";
 
 interface Store {
   id: string;
@@ -117,7 +122,21 @@ export default function AdminDashboardPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
 
-  const [tab, setTab] = useState<"fiado" | "encomendas" | "produtos" | "entrega" | "whatsapp" | "fatura">("fiado");
+  const [tab, setTab] = useState<"fiado" | "encomendas" | "produtos" | "entrega" | "whatsapp" | "fatura" | "cobrancas">("fiado");
+  const [merchantCharges, setMerchantCharges] = useState<MerchantChargeItem[]>([]);
+  const [merchantAccess, setMerchantAccess] = useState<{
+    allowed: boolean;
+    reason: string | null;
+    pending_charges_count: number;
+    financial_blocked: boolean;
+    admin_blocked: boolean;
+  }>({
+    allowed: true,
+    reason: null,
+    pending_charges_count: 0,
+    financial_blocked: false,
+    admin_blocked: false,
+  });
   const [copied, setCopied] = useState(false);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [uploadingImg, setUploadingImg] = useState(false);
@@ -306,7 +325,37 @@ export default function AdminDashboardPage() {
     setLoading(false);
     fetchZapStatus();
     loadEncomendas();
+    loadMerchantCharges();
   }
+
+  const loadMerchantCharges = async () => {
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) return;
+
+      const res = await fetch("/api/merchant/charges", {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setMerchantCharges(data.charges || []);
+        if (data.access) {
+          setMerchantAccess(data.access);
+          if (
+            !data.access.allowed &&
+            (data.access.financial_blocked || data.access.pending_charges_count > 0)
+          ) {
+            setTab("cobrancas");
+          }
+        }
+      }
+    } catch (e) {
+      console.error("Erro ao carregar cobranças InfinitePay do lojista:", e);
+    }
+  };
 
   const loadEncomendas = async () => {
     try {
@@ -1247,15 +1296,40 @@ export default function AdminDashboardPage() {
       </header>
 
       <main className="max-w-3xl mx-auto px-4 mt-6 space-y-5">
-        {store.status === "blocked" && (
-          <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-3xl flex items-center gap-3.5 text-sm shadow-sm shadow-rose-100">
-            <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
-            <span className="font-medium">
-              Sua vitrine está pausada por fatura em aberto. Regularize na aba{" "}
-              <strong className="font-bold underline">Fatura</strong> para liberar suas vendas.
-            </span>
-          </div>
-        )}
+        {/* BLOQUEIO AUTOMÁTICO POR COBRANÇA PENDENTE INFINITEPAY */}
+        {!merchantAccess.allowed &&
+        (merchantAccess.financial_blocked || merchantAccess.pending_charges_count > 0) ? (
+          <MerchantChargesTab
+            charges={merchantCharges}
+            isFinancialBlocked={true}
+            blockedReason={merchantAccess.reason}
+            onRefresh={async () => {
+              await loadMerchantCharges();
+              await loadDashboard();
+            }}
+          />
+        ) : (
+          <>
+            {store.status === "blocked" && (
+              <div className="bg-rose-50 border border-rose-200 text-rose-800 p-4 rounded-3xl flex items-center gap-3.5 text-sm shadow-sm shadow-rose-100">
+                <AlertCircle className="w-5 h-5 text-rose-600 shrink-0" />
+                <span className="font-medium">
+                  {merchantAccess.reason ||
+                    "Sua vitrine está pausada pela administração. Regularize suas pendências para liberar suas vendas."}
+                </span>
+              </div>
+            )}
+
+            {tab === "cobrancas" && (
+              <MerchantChargesTab
+                charges={merchantCharges}
+                isFinancialBlocked={false}
+                onRefresh={async () => {
+                  await loadMerchantCharges();
+                  await loadDashboard();
+                }}
+              />
+            )}
 
         {tab === "fiado" && (
           <>
@@ -2199,11 +2273,14 @@ export default function AdminDashboardPage() {
             </div>
           </div>
         )}
+          </>
+        )}
       </main>
 
-      {/* Floating Bottom Island Dock com 6 Abas */}
-      <nav className="fixed bottom-4 inset-x-3 z-40 max-w-xl mx-auto bg-white/95 backdrop-blur-xl border border-slate-200/80 rounded-[28px] p-1.5 sm:p-2 shadow-2xl shadow-slate-900/10 ring-1 ring-black/5">
-        <div className="grid grid-cols-6 gap-0.5 sm:gap-1">
+      {/* Floating Bottom Island Dock (Oculto quando bloqueado por cobrança pendente) */}
+      {(!(!merchantAccess.allowed && (merchantAccess.financial_blocked || merchantAccess.pending_charges_count > 0))) && (
+      <nav className="fixed bottom-4 inset-x-3 z-40 max-w-2xl mx-auto bg-white/95 backdrop-blur-xl border border-slate-200/80 rounded-[28px] p-1.5 sm:p-2 shadow-2xl shadow-slate-900/10 ring-1 ring-black/5">
+        <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
           <button
             onClick={() => setTab("fiado")}
             className={`py-2 px-1 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
@@ -2285,8 +2362,26 @@ export default function AdminDashboardPage() {
             <Receipt className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2]" />
             <span className="text-[9px] sm:text-[11px] truncate">Fatura</span>
           </button>
+
+          <button
+            onClick={() => setTab("cobrancas")}
+            className={`relative py-2 px-1 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+              tab === "cobrancas"
+                ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
+                : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
+            }`}
+          >
+            <div className="relative">
+              <CreditCard className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2]" />
+              {merchantAccess.pending_charges_count > 0 && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-rose-500 ring-2 ring-white animate-pulse" />
+              )}
+            </div>
+            <span className="text-[9px] sm:text-[11px] truncate">Cobranças</span>
+          </button>
         </div>
       </nav>
+      )}
 
       {/* Modais de Transação, Cliente, Produto e MP */}
       {txModal && (

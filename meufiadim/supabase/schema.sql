@@ -16,6 +16,9 @@ CREATE TABLE IF NOT EXISTS public.stores (
   commission_rate NUMERIC(5,2) DEFAULT 5.00,
   billing_cycle TEXT CHECK (billing_cycle IN ('weekly', 'monthly')) DEFAULT 'weekly',
   status TEXT CHECK (status IN ('active', 'blocked')) DEFAULT 'active',
+  admin_blocked BOOLEAN NOT NULL DEFAULT false,
+  financial_blocked BOOLEAN NOT NULL DEFAULT false,
+  regularized_at TIMESTAMPTZ,
   is_open BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );

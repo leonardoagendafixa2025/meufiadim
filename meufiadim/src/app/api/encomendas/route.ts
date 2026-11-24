@@ -4,6 +4,7 @@ import {
   resolveEncomendaStatus,
   type Encomenda,
 } from "@/lib/encomendas";
+import { canMerchantAccessSystem } from "@/lib/infinitepay";
 
 export const dynamic = "force-dynamic";
 
@@ -187,6 +188,13 @@ export async function POST(req: Request) {
     }
 
     const { user, store, supabase } = auth;
+    const accessCheck = await canMerchantAccessSystem(store.id);
+    if (!accessCheck.allowed) {
+      return NextResponse.json(
+        { error: accessCheck.reason || "Acesso operacional bloqueado por pendência financeira." },
+        { status: 403 }
+      );
+    }
     const body = await req.json();
 
     const {
