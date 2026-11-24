@@ -189,6 +189,24 @@ export default function SuperAdminPage() {
     initDashboard();
   }, []);
 
+  // Polling automático e inteligente da conexão do WhatsApp
+  useEffect(() => {
+    if (!authorized || activeTab !== "whatsapp") return;
+
+    // Se não tiver QR code e não estiver conectado, faz uma busca imediata
+    if (!zapConnected && !zapQR) {
+      fetchZapStatus(false);
+    }
+
+    // Intervalo de verificação: a cada 3.5s se aguardando conexão/QR, ou a cada 25s se já conectado
+    const intervalTime = zapConnected ? 25000 : 3500;
+    const timer = setInterval(() => {
+      fetchZapStatus(false);
+    }, intervalTime);
+
+    return () => clearInterval(timer);
+  }, [authorized, activeTab, zapConnected, zapQR]);
+
   function showToast(text: string, type: "success" | "error" = "success") {
     setToastMsg({ type, text });
     setTimeout(() => setToastMsg(null), 3500);
@@ -259,9 +277,9 @@ export default function SuperAdminPage() {
     }
   }
 
-  async function fetchZapStatus() {
+  async function fetchZapStatus(showLoading = true) {
     try {
-      setZapLoading(true);
+      if (showLoading) setZapLoading(true);
       setZapError(null);
 
       const res = await fetch("/api/zap/qr", { cache: "no-store" });
@@ -275,8 +293,15 @@ export default function SuperAdminPage() {
       }
 
       setZapConfigured(true);
-      setZapConnected(!!data.connected);
+      const wasConnected = zapConnected;
+      const nowConnected = !!data.connected;
+
+      setZapConnected(nowConnected);
       setZapQR(data.qrDataUrl || null);
+
+      if (!wasConnected && nowConnected) {
+        showToast("WhatsApp conectado com sucesso! O robô já está ativo.");
+      }
 
       if (data.error && !data.connected) {
         setZapError(data.error);
@@ -284,7 +309,7 @@ export default function SuperAdminPage() {
     } catch {
       setZapError("Serviço de WhatsApp temporariamente inacessível.");
     } finally {
-      setZapLoading(false);
+      if (showLoading) setZapLoading(false);
     }
   }
 
@@ -1206,7 +1231,7 @@ export default function SuperAdminPage() {
                   </button>
 
                   <button
-                    onClick={fetchZapStatus}
+                    onClick={() => fetchZapStatus(true)}
                     className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 transition active:scale-95"
                   >
                     <RefreshCw className="w-3.5 h-3.5" />
@@ -1296,7 +1321,7 @@ export default function SuperAdminPage() {
 
                   <div className="pt-2 flex flex-wrap gap-2.5">
                     <button
-                      onClick={fetchZapStatus}
+                      onClick={() => fetchZapStatus(true)}
                       className="px-4 py-2.5 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-extrabold flex items-center gap-1.5 transition active:scale-95 shadow-xs"
                     >
                       <RefreshCw className="w-3.5 h-3.5" />
@@ -1353,15 +1378,28 @@ export default function SuperAdminPage() {
                       </div>
                     ) : (
                       <div className="py-8 space-y-3">
-                        <Smartphone className="w-10 h-10 text-slate-300 mx-auto" />
-                        <p className="text-sm font-extrabold text-slate-700">
-                          Aguardando início do robô
-                        </p>
+                        <div className="w-16 h-16 rounded-3xl bg-purple-50 text-purple-600 flex items-center justify-center mx-auto shadow-xs">
+                          <Smartphone className="w-8 h-8 animate-pulse" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-extrabold text-slate-800">
+                            Aguardando geração do QR Code...
+                          </p>
+                          <p className="text-xs text-slate-400 max-w-sm mx-auto mt-0.5">
+                            O robô oficial do WhatsApp está sendo consultado automaticamente.
+                          </p>
+                        </div>
+                        {zapError && (
+                          <div className="max-w-md mx-auto p-3 bg-rose-50 text-rose-700 border border-rose-200/80 rounded-2xl text-xs font-semibold text-center">
+                            {zapError}
+                          </div>
+                        )}
                         <button
-                          onClick={fetchZapStatus}
-                          className="px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-extrabold hover:bg-purple-700 transition"
+                          onClick={() => fetchZapStatus(true)}
+                          className="inline-flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-xl text-xs font-extrabold shadow-md shadow-purple-600/25 active:scale-95 transition"
                         >
-                          Carregar QR Code
+                          <RefreshCw className="w-3.5 h-3.5" />
+                          Gerar QR Code Agora
                         </button>
                       </div>
                     )}
@@ -1382,7 +1420,7 @@ export default function SuperAdminPage() {
                     </div>
 
                     <button
-                      onClick={fetchZapStatus}
+                      onClick={() => fetchZapStatus(true)}
                       className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition active:scale-95"
                     >
                       <RefreshCw className="w-3.5 h-3.5" /> Atualizar QR Code

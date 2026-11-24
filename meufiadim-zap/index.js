@@ -1,4 +1,6 @@
 require("dotenv").config();
+const fs = require("fs");
+const http = require("http");
 const express = require("express");
 const cron = require("node-cron");
 const { createClient } = require("@supabase/supabase-js");
@@ -14,10 +16,18 @@ const QRCode = require("qrcode");
 const pino = require("pino");
 const { generatePixCopiaECola } = require("./pix");
 
+// Tratamento global para impedir encerramento abrupto do processo
+process.on("uncaughtException", (err) => {
+  console.error("🔥 Erro não tratado (uncaughtException):", err?.message || err);
+});
+process.on("unhandledRejection", (reason) => {
+  console.error("🔥 Promise rejeitada (unhandledRejection):", reason);
+});
+
 const app = express();
 app.use(express.json());
 
-const PORT = process.env.PORT || 3001;
+const MAIN_PORT = parseInt(process.env.PORT || "8080", 10);
 const API_KEY = process.env.API_KEY || "minha-chave-secreta-meufiadim";
 
 const supabase =
@@ -30,44 +40,62 @@ let isConnected = false;
 let latestQR = null;
 
 async function connectToWhatsApp() {
-  const { state, saveCreds } = await useMultiFileAuthState("./auth_info");
-  const { version } = await fetchLatestBaileysVersion();
-
-  sock = makeWASocket({
-    version,
-    auth: state,
-    logger: pino({ level: "silent" }),
-    printQRInTerminal: false,
-  });
-
-  sock.ev.on("creds.update", saveCreds);
-
-  sock.ev.on("connection.update", (update) => {
-    const { connection, lastDisconnect, qr } = update;
-
-    if (qr) {
-      latestQR = qr;
-      console.log("\n📱 Escaneie o QR Code abaixo no seu WhatsApp:");
-      qrcodeTerminal.generate(qr, { small: true });
+  try {
+    const { state, saveCreds } = await useMultiFileAuthState("./auth_info");
+    
+    // Versão padrão segura caso a chamada de rede falhe
+    let version = [2, 3000, 1015901307];
+    try {
+      const v = await fetchLatestBaileysVersion();
+      if (v?.version) version = v.version;
+    } catch (verErr) {
+      console.warn("⚠️ Aviso: Usando versão estável do motor:", verErr.message);
     }
 
-    if (connection === "close") {
-      isConnected = false;
-      const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
-      const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+    sock = makeWASocket({
+      version,
+      auth: state,
+      logger: pino({ level: "silent" }),
+      printQRInTerminal: false,
+    });
 
-      console.log("Conexão fechada. Reconectar?", shouldReconnect);
-      if (shouldReconnect) {
-        connectToWhatsApp();
-      } else {
-        console.log("Sessão desconectada. Apague a pasta auth_info e rode novamente.");
+    sock.ev.on("creds.update", saveCreds);
+
+    sock.ev.on("connection.update", (update) => {
+      const { connection, lastDisconnect, qr } = update;
+
+      if (qr) {
+        latestQR = qr;
+        console.log("\n📱 Novo QR Code gerado!");
+        qrcodeTerminal.generate(qr, { small: true });
       }
-    } else if (connection === "open") {
-      isConnected = true;
-      latestQR = null;
-      console.log("✅ WhatsApp conectado e pronto para enviar cobranças!");
-    }
-  });
+
+      if (connection === "close") {
+        isConnected = false;
+        latestQR = null;
+        const statusCode = new Boom(lastDisconnect?.error)?.output?.statusCode;
+        const shouldReconnect = statusCode !== DisconnectReason.loggedOut;
+
+        console.log("Conexão fechada. Reconectar?", shouldReconnect, "Status:", statusCode);
+        if (shouldReconnect) {
+          setTimeout(connectToWhatsApp, 3000);
+        } else {
+          console.log("Sessão desconectada/expirada. Limpando auth_info para novo QR...");
+          try {
+            fs.rmSync("./auth_info", { recursive: true, force: true });
+          } catch (e) {}
+          setTimeout(connectToWhatsApp, 3000);
+        }
+      } else if (connection === "open") {
+        isConnected = true;
+        latestQR = null;
+        console.log("✅ WhatsApp conectado e pronto para enviar cobranças!");
+      }
+    });
+  } catch (err) {
+    console.error("Erro ao inicializar WhatsApp:", err?.message || err);
+    setTimeout(connectToWhatsApp, 5000);
+  }
 }
 
 async function sendChargeMessages(phone, text, pixCode) {
@@ -119,10 +147,19 @@ app.post("/api/disconnect", async (req, res) => {
 
   try {
     if (sock) {
-      await sock.logout();
+      try {
+        await sock.logout();
+      } catch (e) {}
+      try {
+        sock.end();
+      } catch (e) {}
     }
     isConnected = false;
     latestQR = null;
+    try {
+      fs.rmSync("./auth_info", { recursive: true, force: true });
+    } catch (e) {}
+    setTimeout(connectToWhatsApp, 2000);
     return res.json({ ok: true });
   } catch (err) {
     return res.status(500).json({ error: err.message || "Erro ao desconectar." });
@@ -137,7 +174,7 @@ app.get(["/", "/qr"], async (req, res) => {
       <head>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>meufiadim-zap • Conectado</title>
+        <title>MeuFiadim • WhatsApp Conectado</title>
         <style>
           body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #090D16; color: white; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
           .card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 28px; padding: 36px; max-width: 420px; width: 100%; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.5); }
@@ -166,7 +203,7 @@ app.get(["/", "/qr"], async (req, res) => {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta http-equiv="refresh" content="3">
-        <title>meufiadim-zap • Gerando QR Code</title>
+        <title>MeuFiadim • Gerando QR Code</title>
         <style>
           body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #090D16; color: white; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
           .card { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 28px; padding: 36px; max-width: 420px; width: 100%; text-align: center; }
@@ -176,7 +213,7 @@ app.get(["/", "/qr"], async (req, res) => {
       </head>
       <body>
         <div class="card">
-          <h1>Iniciando Baileys...</h1>
+          <h1>Iniciando serviço de WhatsApp...</h1>
           <p>Aguarde alguns segundos, esta página vai atualizar automaticamente com o QR Code.</p>
         </div>
       </body>
@@ -193,7 +230,7 @@ app.get(["/", "/qr"], async (req, res) => {
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta http-equiv="refresh" content="20">
-        <title>Conectar WhatsApp • meufiadim</title>
+        <title>Conectar WhatsApp • MeuFiadim</title>
         <style>
           body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #090D16; color: white; display: flex; align-items: center; justify-content: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
           .card { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.12); border-radius: 32px; padding: 32px 24px; max-width: 380px; width: 100%; text-align: center; box-shadow: 0 25px 50px -12px rgba(0,0,0,0.6); }
@@ -208,7 +245,7 @@ app.get(["/", "/qr"], async (req, res) => {
       <body>
         <div class="card">
           <h1>Conectar WhatsApp</h1>
-          <p>Escaneie o QR Code abaixo com o WhatsApp do seu número de cobrança:</p>
+          <p>Escaneie o QR Code abaixo com o WhatsApp do número oficial de cobrança:</p>
           <div class="qr-box">
             <img src="${qrDataUrl}" alt="QR Code WhatsApp" />
           </div>
@@ -294,7 +331,7 @@ cron.schedule("0 9 * * *", async () => {
         ? generatePixCopiaECola({
             pixKey: c.stores.pix_key,
             merchantName: c.stores.name,
-            merchantCity: c.stores.pix_city || "BRASIL",
+            merchantCity: c.stores.pix_city || "BRASILIA",
             amount: c.balance,
           })
         : null;
@@ -313,7 +350,23 @@ cron.schedule("0 9 * * *", async () => {
   }
 });
 
-app.listen(PORT, "0.0.0.0", () => {
-  console.log(`🚀 API Baileys rodando em 0.0.0.0:${PORT}`);
-  connectToWhatsApp();
+// Listener em todas as portas prováveis para compatibilidade total com o Railway
+const ports = Array.from(new Set([MAIN_PORT, 8080, 3001]));
+ports.forEach((port) => {
+  try {
+    const s = http.createServer(app);
+    s.listen(port, "0.0.0.0", () => {
+      console.log(`🚀 API WhatsApp ativa em 0.0.0.0:${port}`);
+    });
+    s.on("error", (e) => {
+      if (e.code !== "EADDRINUSE") {
+        console.warn(`Aviso porta ${port}:`, e.message);
+      }
+    });
+  } catch (err) {
+    console.warn(`Porta ${port} não iniciada:`, err?.message || err);
+  }
 });
+
+// Inicia conexão do WhatsApp
+connectToWhatsApp();
