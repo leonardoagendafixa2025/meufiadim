@@ -1325,100 +1325,117 @@ export default function SuperAdminPage() {
 
       {/* Conteúdo Principal */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
-        {/* Dock de Navegação Superior (4 Abas) */}
-        <div className="bg-white p-1.5 rounded-2xl border border-slate-200/80 shadow-xs flex flex-wrap gap-1">
-          <button
-            onClick={() => setActiveTab("stores")}
-            className={`flex-1 min-w-[140px] py-2.5 px-4 rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 transition-all duration-150 ${
-              activeTab === "stores"
-                ? "bg-purple-600 text-white shadow-md shadow-purple-600/25"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-            }`}
-          >
-            <Store className="w-4 h-4" />
-            <span>Lojas & Tenants ({stores.length})</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("overview")}
-            className={`flex-1 min-w-[140px] py-2.5 px-4 rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 transition-all duration-150 ${
-              activeTab === "overview"
-                ? "bg-purple-600 text-white shadow-md shadow-purple-600/25"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-            }`}
-          >
-            <TrendingUp className="w-4 h-4" />
-            <span>Visão Geral & Métricas</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab("campaigns")}
-            className={`flex-1 min-w-[140px] py-2.5 px-4 rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 transition-all duration-150 ${
-              activeTab === "campaigns"
-                ? "bg-purple-600 text-white shadow-md shadow-purple-600/25"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-            }`}
-          >
-            <Megaphone className="w-4 h-4" />
-            <span className="flex items-center gap-1.5">
-              Campanhas & Avisos
-              {campaignsHistory.length > 0 && (
-                <span
-                  className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
-                    activeTab === "campaigns"
-                      ? "bg-white/20 text-white"
-                      : "bg-purple-100 text-purple-700"
+        {/* Dock de Navegação Superior Moderno (6 Abas Simétricas) */}
+        <nav
+          aria-label="Menu principal SuperAdmin"
+          className="bg-white/95 backdrop-blur-xl p-2 rounded-[24px] border border-slate-200/80 shadow-md shadow-slate-200/50 ring-1 ring-black/[0.03]"
+        >
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-1.5">
+            {[
+              {
+                id: "stores" as const,
+                label: "Lojas",
+                icon: Store,
+                badge: stores.length,
+                badgeTone: "neutral" as const,
+              },
+              {
+                id: "overview" as const,
+                label: "Visão Geral",
+                icon: TrendingUp,
+              },
+              {
+                id: "campaigns" as const,
+                label: "Campanhas",
+                icon: Megaphone,
+                badge: campaignsHistory.length > 0 ? campaignsHistory.length : undefined,
+                badgeTone: "purple" as const,
+              },
+              {
+                id: "whatsapp" as const,
+                label: "WhatsApp",
+                icon: MessageCircle,
+                statusDot: zapConnected ? "online" : "offline",
+              },
+              {
+                id: "invoices" as const,
+                label: "Comissões",
+                icon: Receipt,
+                badge: invoices.length > 0 ? invoices.length : undefined,
+                badgeTone: "neutral" as const,
+              },
+              {
+                id: "charges" as const,
+                label: "Cobranças",
+                icon: CreditCard,
+                tag: "InfinitePay",
+              },
+            ].map((item) => {
+              const Icon = item.icon;
+              const isActive = activeTab === item.id;
+              return (
+                <button
+                  key={item.id}
+                  type="button"
+                  onClick={() => setActiveTab(item.id)}
+                  className={`group relative h-11 px-3 rounded-2xl text-xs font-extrabold flex items-center justify-center gap-2 whitespace-nowrap transition-all duration-200 ease-out active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-purple-500 ${
+                    isActive
+                      ? "bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/25 ring-1 ring-purple-500/20"
+                      : "text-slate-600 hover:text-slate-900 hover:bg-slate-100/80"
                   }`}
                 >
-                  {campaignsHistory.length}
-                </span>
-              )}
-            </span>
-          </button>
+                  <span
+                    className={`w-7 h-7 rounded-xl flex items-center justify-center shrink-0 transition-colors duration-200 ${
+                      isActive
+                        ? "bg-white/20 text-white"
+                        : "bg-slate-100 text-slate-500 group-hover:bg-purple-100/80 group-hover:text-purple-600"
+                    }`}
+                  >
+                    <Icon className="w-4 h-4 stroke-[2]" />
+                  </span>
 
-          <button
-            onClick={() => setActiveTab("whatsapp")}
-            className={`flex-1 min-w-[140px] py-2.5 px-4 rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 transition-all duration-150 ${
-              activeTab === "whatsapp"
-                ? "bg-purple-600 text-white shadow-md shadow-purple-600/25"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-            }`}
-          >
-            <MessageCircle className="w-4 h-4" />
-            <span className="flex items-center gap-1.5">
-              WhatsApp Central
-              {zapConnected ? (
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-              ) : (
-                <span className="w-2 h-2 rounded-full bg-amber-400" />
-              )}
-            </span>
-          </button>
+                  <span className="truncate">{item.label}</span>
 
-          <button
-            onClick={() => setActiveTab("invoices")}
-            className={`flex-1 min-w-[140px] py-2.5 px-4 rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 transition-all duration-150 ${
-              activeTab === "invoices"
-                ? "bg-purple-600 text-white shadow-md shadow-purple-600/25"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-            }`}
-          >
-            <Receipt className="w-4 h-4" />
-            <span>Faturas & Comissão ({invoices.length})</span>
-          </button>
+                  {item.badge !== undefined && (
+                    <span
+                      className={`px-1.5 py-0.5 rounded-full text-[10px] font-black leading-none shrink-0 ${
+                        isActive
+                          ? "bg-white/20 text-white"
+                          : item.badgeTone === "purple"
+                          ? "bg-purple-100 text-purple-700"
+                          : "bg-slate-200/80 text-slate-700"
+                      }`}
+                    >
+                      {item.badge}
+                    </span>
+                  )}
 
-          <button
-            onClick={() => setActiveTab("charges")}
-            className={`flex-1 min-w-[160px] py-2.5 px-4 rounded-xl text-xs sm:text-sm font-extrabold flex items-center justify-center gap-2 transition-all duration-150 ${
-              activeTab === "charges"
-                ? "bg-purple-600 text-white shadow-md shadow-purple-600/25"
-                : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-            }`}
-          >
-            <CreditCard className="w-4 h-4" />
-            <span>Financeiro → Cobranças</span>
-          </button>
-        </div>
+                  {item.statusDot && (
+                    <span
+                      className={`w-2 h-2 rounded-full shrink-0 ${
+                        item.statusDot === "online"
+                          ? "bg-emerald-400 animate-pulse shadow-xs shadow-emerald-400/60"
+                          : "bg-amber-400"
+                      }`}
+                    />
+                  )}
+
+                  {item.tag && (
+                    <span
+                      className={`hidden xl:inline-flex px-1.5 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wide leading-none shrink-0 ${
+                        isActive
+                          ? "bg-white/20 text-white"
+                          : "bg-emerald-50 text-emerald-700 border border-emerald-200/70"
+                      }`}
+                    >
+                      PIX
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </nav>
 
         {/* ============================================================================== */}
         {/* ABA: GESTÃO DE LOJAS (TENANTS) */}
