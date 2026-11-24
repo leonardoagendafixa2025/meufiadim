@@ -311,11 +311,13 @@ export default function TenantStorePage() {
     loadStore();
   }, [slug]);
 
-  // Lista de categorias únicas derivadas dos produtos
+  // Lista de categorias únicas derivadas dos produtos e categorias configuradas
   const categories = useMemo(() => {
-    const list = Array.from(new Set(products.map((p) => p.category?.trim() || "Geral")));
+    const fromProds = products.map((p) => p.category?.trim() || "Geral");
+    const fromIcons = Object.keys(categoryIconsMap).filter(Boolean);
+    const list = Array.from(new Set([...fromProds, ...fromIcons]));
     return list.filter(Boolean);
-  }, [products]);
+  }, [products, categoryIconsMap]);
 
   // Produtos destacados
   const featuredProducts = useMemo(() => {

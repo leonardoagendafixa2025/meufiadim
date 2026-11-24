@@ -142,6 +142,11 @@ export default function AdminDashboardPage() {
   // Destaque no form de criação de produto
   const [pFeatured, setPFeatured] = useState(false);
 
+  // Modal para Criar Nova Categoria
+  const [showNewCategoryModal, setShowNewCategoryModal] = useState(false);
+  const [newCatName, setNewCatName] = useState("");
+  const [newCatIcon, setNewCatIcon] = useState("package");
+
   // WhatsApp Baileys State (QR Code dentro do Admin)
   const [zapConnected, setZapConnected] = useState(false);
   const [zapQR, setZapQR] = useState<string | null>(null);
@@ -503,11 +508,33 @@ export default function AdminDashboardPage() {
   };
 
   const existingCategories = useMemo(() => {
-    const list = products
+    const fromProds = products
       .map((p) => p.category?.trim())
       .filter((c): c is string => Boolean(c && c !== "Todos"));
-    return Array.from(new Set(list));
-  }, [products]);
+    const fromIcons = Object.keys(categoryIcons).filter(Boolean);
+    return Array.from(new Set([...fromProds, ...fromIcons]));
+  }, [products, categoryIcons]);
+
+  const handleCreateCategory = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = newCatName.trim();
+    if (!trimmed) return;
+
+    const updated = { ...categoryIcons, [trimmed]: newCatIcon };
+    setCategoryIcons(updated);
+    setNewCatName("");
+    setShowNewCategoryModal(false);
+    handleSaveDelivery({ category_icons: updated });
+    alert(`✅ Categoria "${trimmed}" cadastrada com sucesso!`);
+  };
+
+  const handleDeleteCategory = (catName: string) => {
+    if (!confirm(`Deseja remover a categoria "${catName}"?`)) return;
+    const updated = { ...categoryIcons };
+    delete updated[catName];
+    setCategoryIcons(updated);
+    handleSaveDelivery({ category_icons: updated });
+  };
 
   const filteredProducts = useMemo(() => {
     if (selectedProductCategory === "Todos") return products;
@@ -1100,13 +1127,27 @@ export default function AdminDashboardPage() {
                   {products.length} ite{products.length === 1 ? "m" : "ns"} ativo{products.length === 1 ? "" : "s"} na vitrine
                 </p>
               </div>
-              <button
-                onClick={openNewProductModal}
-                className="group inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs shadow-md shadow-slate-900/20 hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-150"
-              >
-                <Plus className="w-4 h-4 text-emerald-400 group-hover:rotate-90 transition-transform duration-200" />
-                <span>Novo Produto</span>
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewCatName("");
+                    setNewCatIcon("package");
+                    setShowNewCategoryModal(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-white hover:bg-slate-50 text-slate-700 font-extrabold text-xs border border-slate-200/80 shadow-xs active:scale-[0.98] transition-all"
+                >
+                  <Tag className="w-3.5 h-3.5 text-emerald-600" />
+                  <span>+ Nova Categoria</span>
+                </button>
+                <button
+                  onClick={openNewProductModal}
+                  className="group inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs shadow-md shadow-slate-900/20 hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-150"
+                >
+                  <Plus className="w-4 h-4 text-emerald-400 group-hover:rotate-90 transition-transform duration-200" />
+                  <span>Novo Produto</span>
+                </button>
+              </div>
             </div>
 
             {/* Filtro de Categorias no Painel */}
@@ -1660,24 +1701,33 @@ export default function AdminDashboardPage() {
 
             {/* CARD 2: Ícones das Categorias (Etapa 2) */}
             <div className="bg-white rounded-[32px] p-6 sm:p-7 border border-slate-200/70 shadow-sm shadow-slate-200/50 space-y-4">
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div>
                   <h3 className="font-extrabold text-base text-slate-900">
-                    Ícones do Cardápio por Categoria
+                    Gerenciar Categorias & Ícones do Cardápio
                   </h3>
                   <p className="text-xs text-slate-500 font-medium">
-                    Escolha qual ícone representa cada categoria no carrossel "Explore o Cardápio".
+                    Crie categorias personalizadas e escolha qual ícone representa cada uma no carrossel da vitrine.
                   </p>
                 </div>
-                <span className="text-xs font-bold text-slate-400">
-                  {existingCategories.length} categorias
-                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setNewCatName("");
+                    setNewCatIcon("package");
+                    setShowNewCategoryModal(true);
+                  }}
+                  className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition shrink-0"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Nova Categoria</span>
+                </button>
               </div>
 
               {existingCategories.length === 0 ? (
-                <p className="text-xs text-slate-400 py-3">
-                  Cadastre produtos com categoria na aba <strong>Produtos</strong> para personalizar os ícones aqui.
-                </p>
+                <div className="p-6 text-center text-xs text-slate-400 font-medium border border-dashed border-slate-200 rounded-2xl">
+                  Nenhuma categoria criada ainda. Clique no botão <strong>Nova Categoria</strong> acima para criar sua primeira!
+                </div>
               ) : (
                 <div className="space-y-3">
                   {existingCategories.map((catName) => {
@@ -1687,41 +1737,51 @@ export default function AdminDashboardPage() {
                         key={catName}
                         className="p-3.5 bg-slate-50 border border-slate-200/60 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3"
                       >
-                        <div className="flex items-center gap-2.5">
-                          <span className="text-xl">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="text-2xl">
                             {AVAILABLE_CATEGORY_ICONS.find((i) => i.key === currentKey)?.emoji || "📦"}
                           </span>
-                          <div>
-                            <span className="font-extrabold text-sm text-slate-900 block">
+                          <div className="min-w-0">
+                            <span className="font-extrabold text-sm text-slate-900 block truncate">
                               {catName}
                             </span>
                             <span className="text-[10px] text-slate-400 font-medium">
-                              Ícone atual: {AVAILABLE_CATEGORY_ICONS.find((i) => i.key === currentKey)?.label || "Padrão"}
+                              Ícone: {AVAILABLE_CATEGORY_ICONS.find((i) => i.key === currentKey)?.label || "Padrão"}
                             </span>
                           </div>
                         </div>
 
-                        {/* Seletor Rápido de Ícones */}
-                        <div className="flex flex-wrap gap-1.5">
-                          {AVAILABLE_CATEGORY_ICONS.map((opt) => {
-                            const isSelected = currentKey === opt.key;
-                            return (
-                              <button
-                                key={opt.key}
-                                type="button"
-                                onClick={() => handleSetCategoryIcon(catName, opt.key)}
-                                className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 border transition active:scale-95 ${
-                                  isSelected
-                                    ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
-                                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
-                                }`}
-                                title={opt.label}
-                              >
-                                <span>{opt.emoji}</span>
-                                <span className="text-[10px] hidden md:inline">{opt.label}</span>
-                              </button>
-                            );
-                          })}
+                        {/* Seletor Rápido de Ícones + Botão Excluir */}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex flex-wrap gap-1">
+                            {AVAILABLE_CATEGORY_ICONS.map((opt) => {
+                              const isSelected = currentKey === opt.key;
+                              return (
+                                <button
+                                  key={opt.key}
+                                  type="button"
+                                  onClick={() => handleSetCategoryIcon(catName, opt.key)}
+                                  className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 border transition active:scale-95 ${
+                                    isSelected
+                                      ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                                      : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                                  }`}
+                                  title={opt.label}
+                                >
+                                  <span>{opt.emoji}</span>
+                                  <span className="text-[10px] hidden md:inline">{opt.label}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCategory(catName)}
+                            className="p-2 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition shrink-0"
+                            title="Remover categoria"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
                         </div>
                       </div>
                     );
@@ -2533,6 +2593,83 @@ export default function AdminDashboardPage() {
               </a>
             )}
           </div>
+        </div>
+      )}
+
+      {/* Modal para Criar Nova Categoria */}
+      {showNewCategoryModal && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <form
+            onSubmit={handleCreateCategory}
+            className="bg-white w-full max-w-sm rounded-[32px] p-6 shadow-2xl border border-slate-100 ring-1 ring-black/5 space-y-4"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Tag className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-extrabold text-lg text-slate-900">
+                  Nova Categoria
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowNewCategoryModal(false)}
+                className="p-1 rounded-full text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500 font-medium leading-relaxed">
+              Crie categorias como "Cervejas", "Petiscos", "Sobremesas" para organizar sua vitrine digital.
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 block">
+                Nome da Categoria *
+              </label>
+              <input
+                type="text"
+                placeholder="Ex: Cervejas, Doces, Porções..."
+                value={newCatName}
+                onChange={(e) => setNewCatName(e.target.value)}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                autoFocus
+                required
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-bold text-slate-700 block">
+                Ícone do Cardápio
+              </label>
+              <div className="grid grid-cols-4 gap-2">
+                {AVAILABLE_CATEGORY_ICONS.map((opt) => (
+                  <button
+                    key={opt.key}
+                    type="button"
+                    onClick={() => setNewCatIcon(opt.key)}
+                    className={`p-2.5 rounded-2xl border flex flex-col items-center justify-center gap-1 transition ${
+                      newCatIcon === opt.key
+                        ? "bg-emerald-50 border-emerald-500 ring-2 ring-emerald-500/20"
+                        : "bg-slate-50 border-slate-200/70 hover:bg-slate-100"
+                    }`}
+                  >
+                    <span className="text-xl">{opt.emoji}</span>
+                    <span className="text-[9px] font-bold text-slate-700 truncate w-full text-center">
+                      {opt.label.split("/")[0].trim()}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-2xl font-extrabold text-sm shadow-md active:scale-95 transition"
+            >
+              Criar Categoria Agora
+            </button>
+          </form>
         </div>
       )}
     </div>
