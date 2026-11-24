@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
+import { getZapApiUrl, getZapApiKey } from "@/lib/whatsapp";
 
 function getSupabaseAdmin() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL || "";
@@ -42,18 +43,10 @@ export async function POST(req: Request) {
       );
     }
 
-    const zapUrl = process.env.ZAP_API_URL;
-    const zapKey = process.env.ZAP_API_KEY || "minha-chave-secreta-meufiadim";
+    const zapUrl = getZapApiUrl();
+    const zapKey = getZapApiKey();
 
-    if (!zapUrl) {
-      return NextResponse.json(
-        { error: "ZAP_API_URL não configurada no servidor." },
-        { status: 500 }
-      );
-    }
-
-    const cleanUrl = zapUrl.replace(/\/$/, "");
-    const res = await fetch(`${cleanUrl}/send`, {
+    const res = await fetch(`${zapUrl}/send`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

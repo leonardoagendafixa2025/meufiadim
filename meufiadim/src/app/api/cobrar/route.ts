@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { getZapApiUrl, getZapApiKey } from "@/lib/whatsapp";
 
 export async function POST(req: Request) {
   try {
@@ -39,11 +40,14 @@ export async function POST(req: Request) {
         : `Quando puder fazer o acerto, é só responder por aqui. Obrigado!`
     );
 
-    const response = await fetch(`${process.env.ZAP_API_URL}/send`, {
+    const zapUrl = getZapApiUrl();
+    const zapKey = getZapApiKey();
+
+    const response = await fetch(`${zapUrl}/send`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": process.env.ZAP_API_KEY || "",
+        "x-api-key": zapKey,
       },
       body: JSON.stringify({
         phone,

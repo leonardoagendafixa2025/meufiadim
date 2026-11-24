@@ -1,22 +1,14 @@
 import { NextResponse } from "next/server";
+import { getZapApiUrl, getZapApiKey } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
-  const zapUrl = process.env.ZAP_API_URL;
-  const zapKey = process.env.ZAP_API_KEY || "minha-chave-secreta-meufiadim";
-
-  if (!zapUrl) {
-    return NextResponse.json({
-      configured: false,
-      connected: false,
-      error: "A URL do robô WhatsApp (ZAP_API_URL) ainda não foi definida nas variáveis da Vercel.",
-    });
-  }
+  const zapUrl = getZapApiUrl();
+  const zapKey = getZapApiKey();
 
   try {
-    const cleanUrl = zapUrl.replace(/\/$/, "");
-    const res = await fetch(`${cleanUrl}/api/qr-json`, {
+    const res = await fetch(`${zapUrl}/api/qr-json`, {
       headers: {
         "x-api-key": zapKey,
       },
@@ -28,7 +20,7 @@ export async function GET() {
       return NextResponse.json({
         configured: true,
         connected: false,
-        error: err.error || "Erro ao consultar status do WhatsApp.",
+        error: err.error || `Erro de conexão HTTP ${res.status} ao consultar o WhatsApp.`,
       });
     }
 
@@ -40,10 +32,11 @@ export async function GET() {
       waiting: !!data.waiting,
     });
   } catch (err: any) {
+    console.error("Falha ao alcançar robô WhatsApp:", err);
     return NextResponse.json({
       configured: true,
       connected: false,
-      error: "Não foi possível alcançar o serviço do WhatsApp no momento.",
+      error: "O robô oficial de WhatsApp está inicializando ou sincronizando. Aguarde...",
     });
   }
 }
