@@ -26,11 +26,27 @@ import {
   ShieldCheck,
   Shield,
   Zap,
+  Bike,
+  MapPin,
+  Beer,
+  CupSoda,
+  Wine,
+  Utensils,
+  Cake,
+  Flame,
+  Star,
+  Tag,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { formatBRL } from "@/lib/whatsapp";
 import { uploadToCloudinary } from "@/lib/cloudinary";
 import { generatePixCopiaECola } from "@/lib/pix";
+import {
+  formatCep,
+  cleanCep,
+  type NeighborhoodRule,
+  type CepRangeRule,
+} from "@/lib/viacep";
 
 interface Store {
   id: string;
@@ -54,6 +70,7 @@ interface Product {
   category: string;
   stock: number;
   image_url?: string;
+  is_featured?: boolean;
 }
 
 interface Customer {
@@ -92,7 +109,7 @@ export default function AdminDashboardPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
 
-  const [tab, setTab] = useState<"fiado" | "produtos" | "whatsapp" | "fatura">("fiado");
+  const [tab, setTab] = useState<"fiado" | "produtos" | "entrega" | "whatsapp" | "fatura">("fiado");
   const [copied, setCopied] = useState(false);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [uploadingImg, setUploadingImg] = useState(false);
@@ -100,6 +117,30 @@ export default function AdminDashboardPage() {
   // Status de Expediente da Loja (Aberta / Fechada)
   const [isOpen, setIsOpen] = useState(true);
   const [togglingOpen, setTogglingOpen] = useState(false);
+
+  // Regras de Frete, Entrega, Destaques e Ícones de Categoria
+  const [neighborhoods, setNeighborhoods] = useState<NeighborhoodRule[]>([]);
+  const [cepRanges, setCepRanges] = useState<CepRangeRule[]>([]);
+  const [deliveryTime, setDeliveryTime] = useState("30min");
+  const [minOrder, setMinOrder] = useState<number>(25.0);
+  const [categoryIcons, setCategoryIcons] = useState<Record<string, string>>({});
+  const [featuredProductIds, setFeaturedProductIds] = useState<string[]>([]);
+  const [savingDelivery, setSavingDelivery] = useState(false);
+
+  // Formulário para Adicionar Bairro
+  const [newNeighName, setNewNeighName] = useState("");
+  const [newNeighFee, setNewNeighFee] = useState("");
+  const [newNeighMinOrder, setNewNeighMinOrder] = useState("");
+  const [newNeighEta, setNewNeighEta] = useState("");
+
+  // Formulário para Adicionar Faixa de CEP
+  const [newCepStart, setNewCepStart] = useState("");
+  const [newCepEnd, setNewCepEnd] = useState("");
+  const [newCepFee, setNewCepFee] = useState("");
+  const [newCepEta, setNewCepEta] = useState("");
+
+  // Destaque no form de criação de produto
+  const [pFeatured, setPFeatured] = useState(false);
 
   // WhatsApp Baileys State (QR Code dentro do Admin)
   const [zapConnected, setZapConnected] = useState(false);
@@ -197,8 +238,17 @@ export default function AdminDashboardPage() {
     setLogoUrl(storeData.logo_url || "");
     setPrimaryColor(storeData.primary_color || "#059669");
 
-    const openState = user.user_metadata?.is_open;
+    const userMeta = user.user_metadata || {};
+    const openState = userMeta.is_open;
     setIsOpen(openState !== undefined ? Boolean(openState) : true);
+
+    // Carrega dados de frete, bairros, faixas de CEP e ícones
+    setNeighborhoods(userMeta.delivery_neighborhoods || []);
+    setCepRanges(userMeta.delivery_cep_ranges || []);
+    setCategoryIcons(userMeta.category_icons || {});
+    setFeaturedProductIds(userMeta.featured_ids || []);
+    setDeliveryTime(userMeta.delivery_time || "30min");
+    setMinOrder(userMeta.min_order !== undefined ? Number(userMeta.min_order) : 25.0);
 
     const [prodRes, custRes, salesRes] = await Promise.all([
       supabase
@@ -473,6 +523,7 @@ export default function AdminDashboardPage() {
     setPCat("");
     setPStock("");
     setPImg("");
+    setPFeatured(false);
     setShowNewProduct(true);
   }
 
@@ -480,15 +531,25 @@ export default function AdminDashboardPage() {
     e.preventDefault();
     if (!store || !pName.trim() || !pPrice) return;
 
-    await supabase.from("products").insert({
-      store_id: store.id,
-      name: pName.trim(),
-      description: pDesc.trim(),
-      price: Number(pPrice.replace(",", ".")),
-      category: pCat.trim() || "Geral",
-      stock: pStock.trim() ? Number(pStock) : 0,
-      image_url: pImg.trim() || null,
-    });
+    const { data: newProd } = await supabase
+      .from("products")
+      .insert({
+        store_id: store.id,
+        name: pName.trim(),
+        description: pDesc.trim(),
+        price: Number(pPrice.replace(",", ".")),
+        category: pCat.trim() || "Geral",
+        stock: pStock.trim() ? Number(pStock) : 0,
+        image_url: pImg.trim() || null,
+      })
+      .select("id")
+      .single();
+
+    if (newProd && pFeatured) {
+      const nextFeatured = [...featuredProductIds, newProd.id];
+      setFeaturedProductIds(nextFeatured);
+      handleSaveDelivery({ featured_ids: nextFeatured });
+    }
 
     setPName("");
     setPDesc("");
@@ -496,9 +557,147 @@ export default function AdminDashboardPage() {
     setPCat("");
     setPStock("");
     setPImg("");
+    setPFeatured(false);
     setShowNewProduct(false);
     loadDashboard();
   };
+
+  const handleSaveDelivery = async (overrides?: any) => {
+    setSavingDelivery(true);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) return;
+
+      const body = {
+        neighborhoods: overrides?.neighborhoods ?? neighborhoods,
+        cep_ranges: overrides?.cep_ranges ?? cepRanges,
+        category_icons: overrides?.category_icons ?? categoryIcons,
+        featured_ids: overrides?.featured_ids ?? featuredProductIds,
+        delivery_time: overrides?.delivery_time ?? deliveryTime,
+        min_order: overrides?.min_order ?? minOrder,
+      };
+
+      const res = await fetch("/api/store/delivery", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao salvar configurações");
+    } catch (err: any) {
+      alert(err.message);
+    } finally {
+      setSavingDelivery(false);
+    }
+  };
+
+  const handleToggleFeatured = async (productId: string) => {
+    const isFeatured = featuredProductIds.includes(productId);
+    const nextList = isFeatured
+      ? featuredProductIds.filter((id) => id !== productId)
+      : [...featuredProductIds, productId];
+
+    setFeaturedProductIds(nextList);
+    await handleSaveDelivery({ featured_ids: nextList });
+  };
+
+  const handleAddNeighborhood = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newNeighName.trim() || !newNeighFee) return;
+
+    const newRule: NeighborhoodRule = {
+      id: `n-${Date.now()}`,
+      name: newNeighName.trim(),
+      fee: Number(newNeighFee.replace(",", ".")),
+      min_order: newNeighMinOrder ? Number(newNeighMinOrder.replace(",", ".")) : undefined,
+      estimate: newNeighEta.trim() || undefined,
+      active: true,
+    };
+
+    const updated = [...neighborhoods, newRule];
+    setNeighborhoods(updated);
+    setNewNeighName("");
+    setNewNeighFee("");
+    setNewNeighMinOrder("");
+    setNewNeighEta("");
+    handleSaveDelivery({ neighborhoods: updated });
+  };
+
+  const handleToggleNeigh = (id: string) => {
+    const updated = neighborhoods.map((n) =>
+      n.id === id ? { ...n, active: !n.active } : n
+    );
+    setNeighborhoods(updated);
+    handleSaveDelivery({ neighborhoods: updated });
+  };
+
+  const handleDeleteNeigh = (id: string) => {
+    if (!confirm("Remover este bairro atendido?")) return;
+    const updated = neighborhoods.filter((n) => n.id !== id);
+    setNeighborhoods(updated);
+    handleSaveDelivery({ neighborhoods: updated });
+  };
+
+  const handleAddCepRange = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCepStart.trim() || !newCepEnd.trim() || !newCepFee) return;
+
+    const newRange: CepRangeRule = {
+      id: `cep-${Date.now()}`,
+      start_cep: cleanCep(newCepStart),
+      end_cep: cleanCep(newCepEnd),
+      fee: Number(newCepFee.replace(",", ".")),
+      estimate: newCepEta.trim() || undefined,
+      active: true,
+    };
+
+    const updated = [...cepRanges, newRange];
+    setCepRanges(updated);
+    setNewCepStart("");
+    setNewCepEnd("");
+    setNewCepFee("");
+    setNewCepEta("");
+    handleSaveDelivery({ cep_ranges: updated });
+  };
+
+  const handleToggleCepRange = (id: string) => {
+    const updated = cepRanges.map((r) =>
+      r.id === id ? { ...r, active: !r.active } : r
+    );
+    setCepRanges(updated);
+    handleSaveDelivery({ cep_ranges: updated });
+  };
+
+  const handleDeleteCepRange = (id: string) => {
+    if (!confirm("Remover esta faixa de CEP?")) return;
+    const updated = cepRanges.filter((r) => r.id !== id);
+    setCepRanges(updated);
+    handleSaveDelivery({ cep_ranges: updated });
+  };
+
+  const handleSetCategoryIcon = (category: string, iconKey: string) => {
+    const updated = { ...categoryIcons, [category]: iconKey };
+    setCategoryIcons(updated);
+    handleSaveDelivery({ category_icons: updated });
+  };
+
+  const AVAILABLE_CATEGORY_ICONS = [
+    { key: "beer", label: "Cerveja / Chopp", emoji: "🍺" },
+    { key: "cup-soda", label: "Refrigerante / Bebidas", emoji: "🥤" },
+    { key: "wine", label: "Drinks / Vinhos", emoji: "🍸" },
+    { key: "utensils", label: "Pratos / Porções", emoji: "🍽️" },
+    { key: "cake", label: "Doces / Sobremesas", emoji: "🍮" },
+    { key: "pizza", label: "Pizzas", emoji: "🍕" },
+    { key: "burger", label: "Lanches / Burgers", emoji: "🍔" },
+    { key: "package", label: "Geral / Outros", emoji: "📦" },
+  ];
 
   const handleDeleteProduct = async (id: string) => {
     if (!confirm("Excluir este produto?")) return;
@@ -972,42 +1171,80 @@ export default function AdminDashboardPage() {
               </div>
             ) : (
               <div className="space-y-3">
-                {filteredProducts.map((p) => (
-                  <div
-                    key={p.id}
-                    className="group bg-white rounded-3xl p-4 border border-slate-200/70 shadow-sm shadow-slate-200/50 hover:shadow-md hover:border-slate-300 transition-all flex items-center justify-between gap-3.5"
-                  >
-                    <div className="flex items-center gap-3.5 min-w-0">
-                      <div className="w-14 h-14 rounded-2xl bg-slate-100 border border-slate-200/60 flex items-center justify-center overflow-hidden shrink-0">
-                        {p.image_url ? (
-                          <img
-                            src={p.image_url}
-                            alt={p.name}
-                            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
-                          />
-                        ) : (
-                          <Package className="w-6 h-6 text-slate-400 stroke-[1.75]" />
-                        )}
+                {filteredProducts.map((p) => {
+                  const isFeatured = featuredProductIds.includes(p.id) || p.is_featured;
+                  return (
+                    <div
+                      key={p.id}
+                      className={`group bg-white rounded-3xl p-4 border shadow-sm transition-all flex items-center justify-between gap-3.5 ${
+                        isFeatured
+                          ? "border-amber-200/90 shadow-amber-100/50 ring-1 ring-amber-400/20"
+                          : "border-slate-200/70 shadow-slate-200/50 hover:shadow-md hover:border-slate-300"
+                      }`}
+                    >
+                      <div className="flex items-center gap-3.5 min-w-0">
+                        <div className="w-14 h-14 rounded-2xl bg-slate-100 border border-slate-200/60 flex items-center justify-center overflow-hidden shrink-0 relative">
+                          {p.image_url ? (
+                            <img
+                              src={p.image_url}
+                              alt={p.name}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-200"
+                            />
+                          ) : (
+                            <Package className="w-6 h-6 text-slate-400 stroke-[1.75]" />
+                          )}
+                          {isFeatured && (
+                            <div className="absolute top-1 left-1 bg-amber-400 text-slate-900 rounded-full p-0.5 shadow-xs">
+                              <Star className="w-2.5 h-2.5 fill-slate-900" />
+                            </div>
+                          )}
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex items-center gap-1.5">
+                            <p className="font-extrabold text-sm text-slate-900 truncate">{p.name}</p>
+                            {isFeatured && (
+                              <span className="inline-flex items-center gap-0.5 px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-black shrink-0 border border-amber-200">
+                                <Flame className="w-2.5 h-2.5 fill-amber-500 text-amber-500" />
+                                TOP
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-500 font-semibold mt-0.5">
+                            <span className="text-emerald-700 font-extrabold">{formatBRL(p.price)}</span> • Estoque: {p.stock} un
+                          </p>
+                          <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
+                            {p.category}
+                          </span>
+                        </div>
                       </div>
-                      <div className="min-w-0">
-                        <p className="font-extrabold text-sm text-slate-900 truncate">{p.name}</p>
-                        <p className="text-xs text-slate-500 font-semibold mt-0.5">
-                          <span className="text-emerald-700 font-extrabold">{formatBRL(p.price)}</span> • Estoque: {p.stock} un
-                        </p>
-                        <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
-                          {p.category}
-                        </span>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleFeatured(p.id)}
+                          title={isFeatured ? "Remover dos destaques" : "Destacar produto no topo (TOP)"}
+                          className={`p-2.5 rounded-2xl transition-all active:scale-95 ${
+                            isFeatured
+                              ? "bg-amber-100 text-amber-800 border border-amber-200 shadow-xs"
+                              : "text-slate-300 hover:text-amber-500 hover:bg-slate-50"
+                          }`}
+                        >
+                          <Star
+                            className={`w-4 h-4 ${
+                              isFeatured ? "fill-amber-400 text-amber-500" : ""
+                            }`}
+                          />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteProduct(p.id)}
+                          className="p-2.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 active:scale-95 rounded-2xl transition-all duration-150 shrink-0"
+                          title="Excluir produto"
+                        >
+                          <Trash2 className="w-4 h-4 stroke-[1.75]" />
+                        </button>
                       </div>
                     </div>
-                    <button
-                      onClick={() => handleDeleteProduct(p.id)}
-                      className="p-2.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 active:scale-95 rounded-2xl transition-all duration-150 shrink-0"
-                      title="Excluir produto"
-                    >
-                      <Trash2 className="w-4 h-4 stroke-[1.75]" />
-                    </button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </>
@@ -1351,14 +1588,398 @@ export default function AdminDashboardPage() {
             </div>
           </div>
         )}
+        {tab === "entrega" && (
+          <div className="space-y-5">
+            {/* Cabeçalho da aba */}
+            <div className="bg-white rounded-[32px] p-6 sm:p-7 border border-slate-200/70 shadow-sm shadow-slate-200/50">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/80">
+                    <Bike className="w-3.5 h-3.5 text-emerald-600" />
+                    Delivery & Vitrine
+                  </span>
+                  <h3 className="font-extrabold text-xl text-slate-900 mt-2 tracking-tight">
+                    Frete, Bairros, CEPs e Categorias
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1 font-medium leading-relaxed">
+                    Defina os locais onde sua loja entrega, os valores de taxa, tempo estimado e escolha os ícones de cada categoria da vitrine.
+                  </p>
+                </div>
+                <div className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 text-emerald-600 flex items-center justify-center shrink-0">
+                  <MapPin className="w-6 h-6 stroke-[2]" />
+                </div>
+              </div>
+
+              {/* Configurações Gerais: Tempo e Pedido Mínimo */}
+              <div className="mt-6 pt-5 border-t border-slate-100 grid sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Tempo Médio de Entrega da Vitrine
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Ex: 30min ou 30-45 min"
+                    value={deliveryTime}
+                    onChange={(e) => setDeliveryTime(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Exibido no chip superior da vitrine do seu cliente.
+                  </p>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-700 block mb-1">
+                    Pedido Mínimo Geral para Entrega (R$)
+                  </label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Ex: 25.00"
+                    value={minOrder}
+                    onChange={(e) => setMinOrder(Number(e.target.value))}
+                    className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200/80 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                  <p className="text-[10px] text-slate-400 mt-1">
+                    Valor mínimo exigido na sacola antes de permitir entrega.
+                  </p>
+                </div>
+              </div>
+
+              <div className="mt-4 flex justify-end">
+                <button
+                  type="button"
+                  onClick={() => handleSaveDelivery()}
+                  disabled={savingDelivery}
+                  className="px-5 py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs shadow-md active:scale-95 transition"
+                >
+                  {savingDelivery ? "Salvando..." : "Salvar Configurações Gerais"}
+                </button>
+              </div>
+            </div>
+
+            {/* CARD 2: Ícones das Categorias (Etapa 2) */}
+            <div className="bg-white rounded-[32px] p-6 sm:p-7 border border-slate-200/70 shadow-sm shadow-slate-200/50 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="font-extrabold text-base text-slate-900">
+                    Ícones do Cardápio por Categoria
+                  </h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Escolha qual ícone representa cada categoria no carrossel "Explore o Cardápio".
+                  </p>
+                </div>
+                <span className="text-xs font-bold text-slate-400">
+                  {existingCategories.length} categorias
+                </span>
+              </div>
+
+              {existingCategories.length === 0 ? (
+                <p className="text-xs text-slate-400 py-3">
+                  Cadastre produtos com categoria na aba <strong>Produtos</strong> para personalizar os ícones aqui.
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {existingCategories.map((catName) => {
+                    const currentKey = categoryIcons[catName] || "package";
+                    return (
+                      <div
+                        key={catName}
+                        className="p-3.5 bg-slate-50 border border-slate-200/60 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className="text-xl">
+                            {AVAILABLE_CATEGORY_ICONS.find((i) => i.key === currentKey)?.emoji || "📦"}
+                          </span>
+                          <div>
+                            <span className="font-extrabold text-sm text-slate-900 block">
+                              {catName}
+                            </span>
+                            <span className="text-[10px] text-slate-400 font-medium">
+                              Ícone atual: {AVAILABLE_CATEGORY_ICONS.find((i) => i.key === currentKey)?.label || "Padrão"}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Seletor Rápido de Ícones */}
+                        <div className="flex flex-wrap gap-1.5">
+                          {AVAILABLE_CATEGORY_ICONS.map((opt) => {
+                            const isSelected = currentKey === opt.key;
+                            return (
+                              <button
+                                key={opt.key}
+                                type="button"
+                                onClick={() => handleSetCategoryIcon(catName, opt.key)}
+                                className={`px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1 border transition active:scale-95 ${
+                                  isSelected
+                                    ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                                    : "bg-white text-slate-700 border-slate-200 hover:bg-slate-100"
+                                }`}
+                                title={opt.label}
+                              >
+                                <span>{opt.emoji}</span>
+                                <span className="text-[10px] hidden md:inline">{opt.label}</span>
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            {/* CARD 3: Frete por Bairro (Etapa 3) */}
+            <div className="bg-white rounded-[32px] p-6 sm:p-7 border border-slate-200/70 shadow-sm shadow-slate-200/50 space-y-5">
+              <div>
+                <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
+                  <MapPin className="w-5 h-5 text-emerald-600" />
+                  Bairros Atendidos & Taxas de Entrega
+                </h3>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  No checkout, o cliente seleciona o bairro e o valor do frete é somado automaticamente.
+                </p>
+              </div>
+
+              {/* Form Novo Bairro */}
+              <form
+                onSubmit={handleAddNeighborhood}
+                className="bg-slate-50 border border-slate-200/80 p-4 rounded-2xl space-y-3"
+              >
+                <span className="text-xs font-extrabold text-slate-800 uppercase tracking-wider block">
+                  + Adicionar Novo Bairro Atendido
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                  <input
+                    type="text"
+                    placeholder="Nome do bairro *"
+                    value={newNeighName}
+                    onChange={(e) => setNewNeighName(e.target.value)}
+                    className="sm:col-span-2 px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    required
+                  />
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Taxa (R$) *"
+                    value={newNeighFee}
+                    onChange={(e) => setNewNeighFee(e.target.value)}
+                    className="px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                    required
+                  />
+                  <input
+                    type="text"
+                    placeholder="Tempo (ex: 30min)"
+                    value={newNeighEta}
+                    onChange={(e) => setNewNeighEta(e.target.value)}
+                    className="px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-extrabold text-xs shadow-md active:scale-95 transition"
+                  >
+                    Adicionar Bairro
+                  </button>
+                </div>
+              </form>
+
+              {/* Lista de Bairros */}
+              {neighborhoods.length === 0 ? (
+                <div className="p-6 text-center text-xs text-slate-400 font-medium border border-dashed border-slate-200 rounded-2xl">
+                  Nenhum bairro cadastrado. Adicione seu primeiro bairro acima!
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {neighborhoods.map((n) => (
+                    <div
+                      key={n.id}
+                      className="py-3 flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-sm text-slate-900 truncate">
+                            {n.name}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              n.active
+                                ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                                : "bg-slate-100 text-slate-500"
+                            }`}
+                          >
+                            {n.active ? "Ativo" : "Pausado"}
+                          </span>
+                        </div>
+                        <p className="text-slate-400 mt-0.5 font-medium">
+                          {n.estimate ? `Estimativa: ${n.estimate}` : "Entrega padrão"}
+                          {n.min_order ? ` • Pedido mín: ${formatBRL(n.min_order)}` : ""}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="font-black text-sm text-emerald-700">
+                          {formatBRL(n.fee)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleNeigh(n.id)}
+                          className="text-[11px] font-bold text-slate-500 hover:text-slate-800 px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
+                        >
+                          {n.active ? "Pausar" : "Ativar"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteNeigh(n.id)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition"
+                          title="Excluir bairro"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* CARD 4: Frete por Faixa de CEP (Etapa 4) */}
+            <div className="bg-white rounded-[32px] p-6 sm:p-7 border border-slate-200/70 shadow-sm shadow-slate-200/50 space-y-5">
+              <div>
+                <h3 className="font-extrabold text-base text-slate-900 flex items-center gap-2">
+                  <Tag className="w-5 h-5 text-blue-600" />
+                  Faixas de CEP & Taxas Regionais
+                </h3>
+                <p className="text-xs text-slate-500 font-medium mt-0.5">
+                  Caso o bairro não esteja cadastrado na tabela de bairros, o sistema consulta se o CEP do cliente cai em uma destas faixas.
+                </p>
+              </div>
+
+              {/* Form Nova Faixa de CEP */}
+              <form
+                onSubmit={handleAddCepRange}
+                className="bg-slate-50 border border-slate-200/80 p-4 rounded-2xl space-y-3"
+              >
+                <span className="text-xs font-extrabold text-slate-800 uppercase tracking-wider block">
+                  + Adicionar Nova Faixa de CEP
+                </span>
+                <div className="grid grid-cols-1 sm:grid-cols-4 gap-2.5">
+                  <input
+                    type="text"
+                    placeholder="CEP Inicial (00000-000) *"
+                    value={newCepStart}
+                    onChange={(e) => setNewCepStart(formatCep(e.target.value))}
+                    maxLength={9}
+                    className="px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                  <input
+                    type="text"
+                    placeholder="CEP Final (00000-000) *"
+                    value={newCepEnd}
+                    onChange={(e) => setNewCepEnd(formatCep(e.target.value))}
+                    maxLength={9}
+                    className="px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                  <input
+                    type="number"
+                    step="0.01"
+                    placeholder="Taxa (R$) *"
+                    value={newCepFee}
+                    onChange={(e) => setNewCepFee(e.target.value)}
+                    className="px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    required
+                  />
+                  <input
+                    type="text"
+                    placeholder="Tempo (ex: 40min)"
+                    value={newCepEta}
+                    onChange={(e) => setNewCepEta(e.target.value)}
+                    className="px-3.5 py-2.5 bg-white border border-slate-200 rounded-xl text-xs sm:text-sm font-semibold text-slate-900 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div className="flex justify-end">
+                  <button
+                    type="submit"
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-extrabold text-xs shadow-md active:scale-95 transition"
+                  >
+                    Adicionar Faixa de CEP
+                  </button>
+                </div>
+              </form>
+
+              {/* Lista de Faixas */}
+              {cepRanges.length === 0 ? (
+                <div className="p-6 text-center text-xs text-slate-400 font-medium border border-dashed border-slate-200 rounded-2xl">
+                  Nenhuma faixa de CEP cadastrada ainda.
+                </div>
+              ) : (
+                <div className="divide-y divide-slate-100">
+                  {cepRanges.map((r) => (
+                    <div
+                      key={r.id}
+                      className="py-3 flex items-center justify-between gap-3 text-xs"
+                    >
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-extrabold text-sm text-slate-900">
+                            {formatCep(r.start_cep)} até {formatCep(r.end_cep)}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              r.active
+                                ? "bg-blue-50 text-blue-700 border border-blue-200"
+                                : "bg-slate-100 text-slate-500"
+                            }`}
+                          >
+                            {r.active ? "Ativo" : "Pausado"}
+                          </span>
+                        </div>
+                        {r.estimate && (
+                          <p className="text-slate-400 mt-0.5 font-medium">
+                            Estimativa: {r.estimate}
+                          </p>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-3 shrink-0">
+                        <span className="font-black text-sm text-blue-700">
+                          {formatBRL(r.fee)}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleToggleCepRange(r.id)}
+                          className="text-[11px] font-bold text-slate-500 hover:text-slate-800 px-2 py-1 bg-slate-100 hover:bg-slate-200 rounded-lg transition"
+                        >
+                          {r.active ? "Pausar" : "Ativar"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCepRange(r.id)}
+                          className="p-1.5 text-slate-400 hover:text-rose-600 rounded-lg transition"
+                          title="Excluir faixa"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
       </main>
 
-      {/* Floating Bottom Island Dock */}
-      <nav className="fixed bottom-4 inset-x-4 z-40 max-w-md mx-auto bg-white/95 backdrop-blur-xl border border-slate-200/80 rounded-[28px] p-2 shadow-2xl shadow-slate-900/10 ring-1 ring-black/5">
-        <div className="grid grid-cols-4 gap-1">
+      {/* Floating Bottom Island Dock com 5 Abas */}
+      <nav className="fixed bottom-4 inset-x-4 z-40 max-w-lg mx-auto bg-white/95 backdrop-blur-xl border border-slate-200/80 rounded-[28px] p-2 shadow-2xl shadow-slate-900/10 ring-1 ring-black/5">
+        <div className="grid grid-cols-5 gap-1">
           <button
             onClick={() => setTab("fiado")}
-            className={`py-2 px-1.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+            className={`py-2 px-1 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
               tab === "fiado"
                 ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
                 : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
@@ -1370,7 +1991,7 @@ export default function AdminDashboardPage() {
 
           <button
             onClick={() => setTab("produtos")}
-            className={`py-2 px-1.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+            className={`py-2 px-1 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
               tab === "produtos"
                 ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
                 : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
@@ -1381,11 +2002,23 @@ export default function AdminDashboardPage() {
           </button>
 
           <button
+            onClick={() => setTab("entrega")}
+            className={`py-2 px-1 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+              tab === "entrega"
+                ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
+                : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
+            }`}
+          >
+            <Bike className="w-5 h-5 stroke-[2]" />
+            <span className="text-[10px] sm:text-[11px]">Frete</span>
+          </button>
+
+          <button
             onClick={() => {
               setTab("whatsapp");
               fetchZapStatus();
             }}
-            className={`relative py-2 px-1.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+            className={`relative py-2 px-1 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
               tab === "whatsapp"
                 ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
                 : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
@@ -1404,7 +2037,7 @@ export default function AdminDashboardPage() {
 
           <button
             onClick={() => setTab("fatura")}
-            className={`py-2 px-1.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+            className={`py-2 px-1 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
               tab === "fatura"
                 ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
                 : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
@@ -1674,6 +2307,21 @@ export default function AdminDashboardPage() {
               rows={2}
               className="w-full px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-sm font-semibold text-slate-900 placeholder:text-slate-400 shadow-xs focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none transition-all"
             />
+
+            {/* Checkbox de Produto em Destaque */}
+            <label className="flex items-center gap-3 p-3.5 rounded-2xl bg-amber-50/80 border border-amber-200/90 cursor-pointer hover:bg-amber-100/60 transition">
+              <input
+                type="checkbox"
+                checked={pFeatured}
+                onChange={(e) => setPFeatured(e.target.checked)}
+                className="w-4 h-4 text-amber-500 rounded focus:ring-amber-400"
+              />
+              <div className="flex items-center gap-1.5 text-xs font-black text-amber-900">
+                <Star className="w-4 h-4 fill-amber-400 text-amber-500" />
+                <span>Marcar como Destaque (Aparece no carrossel TOP / Em Alta)</span>
+              </div>
+            </label>
+
             <button
               type="submit"
               disabled={uploadingImg}

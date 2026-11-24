@@ -34,9 +34,18 @@ import {
   BookOpen,
   Sparkles,
   Check,
+  AlertCircle,
+  Truck,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { formatBRL } from "@/lib/whatsapp";
+import {
+  formatCep,
+  cleanCep,
+  fetchViaCep,
+  calculateDeliveryFee,
+  type FreightCalculationResult,
+} from "@/lib/viacep";
 
 interface Store {
   id: string;
@@ -156,6 +165,17 @@ export default function TenantStorePage() {
   // Modal de Reserva
   const [reserveModalOpen, setReserveModalOpen] = useState(false);
 
+  // Modal de Consulta de Frete por CEP no Cabeçalho
+  const [freightModalOpen, setFreightModalOpen] = useState(false);
+  const [modalCepInput, setModalCepInput] = useState("");
+  const [modalFreightResult, setModalFreightResult] = useState<FreightCalculationResult | null>(null);
+  const [loadingFreight, setLoadingFreight] = useState(false);
+
+  // Consulta de Frete por CEP no Checkout
+  const [checkoutFreightResult, setCheckoutFreightResult] = useState<FreightCalculationResult | null>(null);
+  const [loadingCheckoutCep, setLoadingCheckoutCep] = useState(false);
+  const [freightError, setFreightError] = useState<string | null>(null);
+
   // Notificação Toast rápida
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -166,6 +186,68 @@ export default function TenantStorePage() {
     toastTimeoutRef.current = setTimeout(() => {
       setToastMessage(null);
     }, 2200);
+  };
+
+  const handleLookupCep = async (cepToTest: string, isFromModal = false) => {
+    const digits = cleanCep(cepToTest);
+    if (digits.length !== 8) {
+      if (isFromModal) alert("Digite um CEP válido com 8 dígitos.");
+      return;
+    }
+
+    if (isFromModal) {
+      setLoadingFreight(true);
+      setModalFreightResult(null);
+    } else {
+      setLoadingCheckoutCep(true);
+      setFreightError(null);
+    }
+
+    const viaCep = await fetchViaCep(digits);
+    if (!viaCep) {
+      if (isFromModal) {
+        setModalFreightResult({
+          found: false,
+          fee: 0,
+          message: "CEP não encontrado ou inválido.",
+        });
+        setLoadingFreight(false);
+      } else {
+        setFreightError("CEP não encontrado. Verifique os números digitados.");
+        setLoadingCheckoutCep(false);
+      }
+      return;
+    }
+
+    if (!isFromModal) {
+      if (viaCep.logradouro) setAddressStreet(viaCep.logradouro);
+      if (viaCep.bairro) setSelectedNeighborhood(viaCep.bairro);
+    }
+
+    // Calcula de acordo com a regra de prioridade: 1º Bairro -> 2º Faixa de CEP
+    const result = calculateDeliveryFee({
+      neighborhoodName: viaCep.bairro,
+      cep: digits,
+      neighborhoods,
+      cepRanges,
+    });
+
+    if (isFromModal) {
+      setModalFreightResult({
+        ...result,
+        matchedName: result.matchedName || viaCep.bairro || `${viaCep.localidade} - ${viaCep.uf}`,
+      });
+      setLoadingFreight(false);
+    } else {
+      setCheckoutFreightResult(result);
+      setLoadingCheckoutCep(false);
+      if (result.found) {
+        setCalculatedFreight(result.fee);
+        setFreightError(null);
+      } else {
+        setFreightError(result.message || "Não entregamos nesse endereço ou região.");
+      }
+    }
   };
 
   useEffect(() => {
@@ -346,12 +428,18 @@ export default function TenantStorePage() {
       return;
     }
     if (deliveryType === "entrega") {
+      if (freightError) {
+        alert(
+          "Atenção: Não atendemos este endereço para entrega. Por favor, ajuste o CEP/bairro ou selecione a opção Retirada na Loja."
+        );
+        return;
+      }
       if (!selectedNeighborhood && !addressStreet) {
-        alert("Por favor, selecione seu bairro ou digite seu endereço de entrega.");
+        alert("Por favor, informe seu CEP, selecione seu bairro ou digite o endereço de entrega.");
         return;
       }
     }
-    if (minOrder && subtotalPrice < minOrder) {
+    if (deliveryType === "entrega" && minOrder && subtotalPrice < minOrder) {
       alert(`O pedido mínimo para entrega é de ${formatBRL(minOrder)}.`);
       return;
     }
@@ -366,7 +454,7 @@ export default function TenantStorePage() {
     const destinationAddress =
       deliveryType === "retirada"
         ? "🏬 Retirada no balcão da loja"
-        : `📍 Entrega: ${addressStreet || "Endereço"} ${addressNumber ? "nº " + addressNumber : ""} ${addressComp ? "(" + addressComp + ")" : ""} - Bairro: ${selectedNeighborhood || "Informado"}`;
+        : `📍 Entrega: ${addressStreet || "Endereço"} ${addressNumber ? "nº " + addressNumber : ""} ${addressComp ? "(" + addressComp + ")" : ""} - Bairro: ${selectedNeighborhood || "Informado"} ${cepInput ? "(CEP " + cepInput + ")" : ""}`;
 
     const lines = [
       `🛍️ *NOVO PEDIDO — ${store?.name || "Cardápio"}*`,
@@ -561,15 +649,27 @@ export default function TenantStorePage() {
               <span>{deliveryTime}</span>
             </div>
 
-            {/* Taxa a partir de */}
-            <div className="inline-flex items-center gap-1 bg-slate-50 dark:bg-slate-800/80 px-2.5 py-1 rounded-full border border-slate-200/70 dark:border-slate-700/60">
+            {/* Taxa a partir de & Botão Calcular Frete */}
+            <button
+              type="button"
+              onClick={() => {
+                setFreightModalOpen(true);
+                setModalFreightResult(null);
+                setModalCepInput("");
+              }}
+              className="inline-flex items-center gap-1.5 bg-slate-50 dark:bg-slate-800/80 hover:bg-slate-100 dark:hover:bg-slate-700/80 px-2.5 py-1 rounded-full border border-slate-200/70 dark:border-slate-700/60 active:scale-95 transition"
+              title="Clique para calcular o frete para seu CEP"
+            >
               <Bike className="w-3.5 h-3.5 text-slate-400" />
               <span>
                 {startingDeliveryFee !== null
                   ? `A partir de ${formatBRL(startingDeliveryFee)}`
                   : "Frete a calcular"}
               </span>
-            </div>
+              <span className="text-[10px] text-emerald-600 dark:text-emerald-400 font-black underline">
+                Calcular
+              </span>
+            </button>
 
             {/* Pedido mínimo */}
             {minOrder > 0 && (
@@ -1054,7 +1154,85 @@ export default function TenantStorePage() {
         </div>
       )}
 
-      {/* 10. GAVETA DO CARRINHO (CHECKOUT) */}
+      {/* 9.1 MODAL DE CÁLCULO DE FRETE POR CEP NO CABEÇALHO */}
+      {freightModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[28px] p-6 shadow-2xl border border-slate-100 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Truck className="w-5 h-5 text-emerald-600" />
+                <h3 className="font-black text-lg text-slate-900 dark:text-white">
+                  Calcular Frete
+                </h3>
+              </div>
+              <button
+                onClick={() => setFreightModalOpen(false)}
+                className="p-1 rounded-full text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed font-medium">
+              Informe seu CEP para calcular a taxa de entrega e o prazo estimado para o seu endereço:
+            </p>
+
+            <div className="flex gap-2">
+              <input
+                type="text"
+                placeholder="00000-000"
+                value={modalCepInput}
+                maxLength={9}
+                onChange={(e) => setModalCepInput(formatCep(e.target.value))}
+                className="flex-1 px-4 py-3 bg-slate-50 dark:bg-slate-800 border border-slate-200/80 dark:border-slate-700 rounded-2xl text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+              <button
+                type="button"
+                onClick={() => handleLookupCep(modalCepInput, true)}
+                disabled={loadingFreight}
+                style={{ backgroundColor: brandColor }}
+                className="px-4 py-3 text-white rounded-2xl font-black text-xs shrink-0 active:scale-95 transition"
+              >
+                {loadingFreight ? "Buscando..." : "Calcular"}
+              </button>
+            </div>
+
+            {modalFreightResult && (
+              <div
+                className={`p-4 rounded-2xl text-xs space-y-1.5 border ${
+                  modalFreightResult.found
+                    ? "bg-emerald-50 dark:bg-emerald-950/60 border-emerald-200 text-emerald-900 dark:text-emerald-300"
+                    : "bg-rose-50 dark:bg-rose-950/60 border-rose-200 text-rose-900 dark:text-rose-300"
+                }`}
+              >
+                {modalFreightResult.found ? (
+                  <>
+                    <div className="flex items-center justify-between font-black text-sm">
+                      <span>Taxa de Entrega:</span>
+                      <span>{formatBRL(modalFreightResult.fee)}</span>
+                    </div>
+                    {modalFreightResult.estimate && (
+                      <p className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+                        ⏱️ Prazo estimado: {modalFreightResult.estimate}
+                      </p>
+                    )}
+                    {modalFreightResult.matchedName && (
+                      <p className="text-[11px] text-slate-600 dark:text-slate-400">
+                        📍 Região: {modalFreightResult.matchedName}
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="font-bold flex items-center gap-1.5">
+                    <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                    <span>{modalFreightResult.message || "Não entregamos nesse endereço ou região."}</span>
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
       {cartOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
           <div className="bg-white dark:bg-slate-900 w-full sm:max-w-lg max-h-[92vh] rounded-t-[36px] sm:rounded-[36px] flex flex-col overflow-hidden shadow-2xl border border-slate-100 dark:border-slate-800 ring-1 ring-black/10">
@@ -1178,31 +1356,103 @@ export default function TenantStorePage() {
 
               {/* Endereço de Entrega (se for Entrega) */}
               {deliveryType === "entrega" && (
-                <div className="space-y-2">
+                <div className="space-y-3">
                   <label className="text-xs font-black uppercase tracking-wider text-slate-400">
                     Endereço para entrega
                   </label>
 
+                  {/* Campo de CEP com máscara e busca automática */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold text-slate-500">
+                        Calcular frete por CEP
+                      </span>
+                      {loadingCheckoutCep && (
+                        <span className="text-[10px] text-emerald-600 font-bold animate-pulse">
+                          Buscando endereço...
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        placeholder="00000-000"
+                        value={cepInput}
+                        maxLength={9}
+                        onChange={(e) => {
+                          const formatted = formatCep(e.target.value);
+                          setCepInput(formatted);
+                          if (cleanCep(formatted).length === 8) {
+                            handleLookupCep(formatted, false);
+                          }
+                        }}
+                        className="flex-1 px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => handleLookupCep(cepInput, false)}
+                        disabled={loadingCheckoutCep}
+                        className="px-4 py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl font-bold text-xs shrink-0 active:scale-95 transition"
+                      >
+                        Buscar
+                      </button>
+                    </div>
+
+                    {/* Feedback do Frete calculado ou erro */}
+                    {checkoutFreightResult && checkoutFreightResult.found && (
+                      <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800/60 rounded-xl flex items-center justify-between text-xs text-emerald-800 dark:text-emerald-300">
+                        <span className="font-semibold">
+                          Frete: {formatBRL(checkoutFreightResult.fee)} ({checkoutFreightResult.estimate || "30-50 min"})
+                        </span>
+                        <span className="text-[10px] uppercase font-bold text-emerald-600 bg-white dark:bg-slate-900 px-2 py-0.5 rounded-md border border-emerald-200">
+                          {checkoutFreightResult.ruleType === "neighborhood" ? "Bairro Atendido" : "Faixa CEP"}
+                        </span>
+                      </div>
+                    )}
+
+                    {freightError && (
+                      <div className="p-2.5 bg-rose-50 dark:bg-rose-950/50 border border-rose-200 dark:border-rose-800/60 rounded-xl text-xs text-rose-700 dark:text-rose-300 flex items-center gap-1.5 font-medium">
+                        <AlertCircle className="w-4 h-4 shrink-0 text-rose-500" />
+                        <span>{freightError}</span>
+                      </div>
+                    )}
+                  </div>
+
                   {/* Seleção de Bairro se houver bairros cadastrados */}
                   {neighborhoods.filter((n) => n.active).length > 0 && (
-                    <select
-                      value={selectedNeighborhood}
-                      onChange={(e) => {
-                        setSelectedNeighborhood(e.target.value);
-                        const found = neighborhoods.find((n) => n.name === e.target.value);
-                        if (found) setCalculatedFreight(Number(found.fee));
-                      }}
-                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 dark:text-white focus:outline-none"
-                    >
-                      <option value="">Selecione seu bairro atendido *</option>
-                      {neighborhoods
-                        .filter((n) => n.active)
-                        .map((n) => (
-                          <option key={n.id} value={n.name}>
-                            {n.name} — Frete {formatBRL(n.fee)}
-                          </option>
-                        ))}
-                    </select>
+                    <div className="space-y-1">
+                      <span className="text-[11px] font-bold text-slate-500">
+                        Ou selecione seu bairro atendido:
+                      </span>
+                      <select
+                        value={selectedNeighborhood}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setSelectedNeighborhood(val);
+                          const found = neighborhoods.find((n) => n.name === val);
+                          if (found) {
+                            setCalculatedFreight(Number(found.fee));
+                            setFreightError(null);
+                            setCheckoutFreightResult({
+                              found: true,
+                              fee: Number(found.fee),
+                              estimate: found.estimate,
+                              ruleType: "neighborhood",
+                            });
+                          }
+                        }}
+                        className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      >
+                        <option value="">Selecione seu bairro atendido *</option>
+                        {neighborhoods
+                          .filter((n) => n.active)
+                          .map((n) => (
+                            <option key={n.id} value={n.name}>
+                              {n.name} — Frete {formatBRL(n.fee)} {n.estimate ? `(${n.estimate})` : ""}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
                   )}
 
                   <input
