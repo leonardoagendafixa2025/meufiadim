@@ -194,7 +194,7 @@ export default function AdminDashboardPage() {
   // Forms
   const [cName, setCName] = useState("");
   const [cPhone, setCPhone] = useState("");
-  const [cLimit, setCLimit] = useState("200");
+  const [cLimit, setCLimit] = useState("");
 
   const [txAmount, setTxAmount] = useState("");
   const [txDueDate, setTxDueDate] = useState("");
@@ -640,7 +640,7 @@ export default function AdminDashboardPage() {
 
     setCName("");
     setCPhone("");
-    setCLimit("200");
+    setCLimit("");
     setShowNewCustomer(false);
     loadDashboard();
   };
@@ -813,6 +813,13 @@ export default function AdminDashboardPage() {
       (p) => (p.category || "Geral").toLowerCase() === selectedProductCategory.toLowerCase()
     );
   }, [products, selectedProductCategory]);
+
+  function openNewCustomerModal() {
+    setCName("");
+    setCPhone("");
+    setCLimit("");
+    setShowNewCustomer(true);
+  }
 
   function openNewProductModal() {
     setPName("");
@@ -1262,7 +1269,7 @@ export default function AdminDashboardPage() {
                 </p>
               </div>
               <button
-                onClick={() => setShowNewCustomer(true)}
+                onClick={openNewCustomerModal}
                 className="group inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs shadow-md shadow-slate-900/20 hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-150"
               >
                 <Plus className="w-4 h-4 text-emerald-400 group-hover:rotate-90 transition-transform duration-200" />
@@ -1282,7 +1289,7 @@ export default function AdminDashboardPage() {
                   Cadastre seus clientes para controlar saldos, limites e cobrar automaticamente no WhatsApp com chave Pix.
                 </p>
                 <button
-                  onClick={() => setShowNewCustomer(true)}
+                  onClick={openNewCustomerModal}
                   className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 hover:-translate-y-0.5 active:scale-[0.98] transition-all"
                 >
                   <Plus className="w-4 h-4" /> Cadastrar primeiro cliente
