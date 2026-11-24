@@ -78,7 +78,7 @@ export default function LandingPage() {
     },
     {
       title: "Autônomos & Revendedores",
-      desc: "Para quem vende cosméticos, perfumes e produtos por catálogo. Sua vitrine virtual com fotos no Cloudinary para mandar no Zap.",
+      desc: "Para quem vende cosméticos, perfumes e produtos por catálogo. Sua vitrine virtual com fotos em alta definição para mandar no Zap.",
       badge: "Empreendedores",
       metric: "Profissionalismo total",
     },
@@ -437,10 +437,10 @@ export default function LandingPage() {
                 <Palette className="w-6 h-6" />
               </div>
               <h3 className="text-xl font-bold text-slate-900">
-                Sua Marca & Fotos no Cloudinary
+                Sua Marca & Fotos em Alta Resolução
               </h3>
               <p className="text-slate-600 text-sm leading-relaxed">
-                Suba fotos de produtos e logotipo da sua loja com otimização em nuvem em alta resolução e carregamento instantâneo.
+                Suba fotos de produtos e logotipo da sua loja com processamento em nuvem em alta resolução e carregamento instantâneo.
               </p>
             </div>
 
@@ -700,7 +700,7 @@ export default function LandingPage() {
                 <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
                   <Check className="w-3.5 h-3.5 stroke-[2.5]" />
                 </div>
-                <span>Upload de fotos no Cloudinary com carregamento instantâneo</span>
+                <span>Upload de fotos ultrarrápido com carregamento instantâneo</span>
               </div>
               <div className="flex items-center gap-3">
                 <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">

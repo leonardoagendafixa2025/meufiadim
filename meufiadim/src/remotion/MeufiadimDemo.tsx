@@ -77,7 +77,7 @@ function SceneWhatsAppPix() {
     <AbsoluteFill className="bg-[#0B141A] flex flex-col justify-center p-6 gap-3 text-white">
       <div className="text-center mb-2">
         <span className="text-xs font-semibold text-emerald-400 bg-emerald-950/80 px-3 py-1 rounded-full">
-          WhatsApp Automático • Baileys
+          WhatsApp Automático • MeuFiadim
         </span>
       </div>
 

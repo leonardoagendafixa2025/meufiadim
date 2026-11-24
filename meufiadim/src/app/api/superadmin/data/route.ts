@@ -46,21 +46,32 @@ export async function GET(req: Request) {
       throw storesError;
     }
 
-    // 2. Buscar dados agregados de clientes, produtos, vendas e faturas
-    const [custRes, prodRes, salesRes, invRes] = await Promise.all([
+    // 2. Buscar dados agregados de clientes, produtos, vendas, faturas e usuários de autenticação
+    const [custRes, prodRes, salesRes, invRes, usersRes] = await Promise.all([
       supabaseAdmin.from("customers").select("id, store_id, balance"),
       supabaseAdmin.from("products").select("id, store_id"),
-      supabaseAdmin.from("sales").select("id, store_id, total_amount, commission_amount"),
+      supabaseAdmin
+        .from("sales")
+        .select("id, store_id, total_amount, commission_amount"),
       supabaseAdmin
         .from("platform_invoices")
         .select("*, stores(name, slug)")
         .order("created_at", { ascending: false }),
+      supabaseAdmin.auth.admin.listUsers(),
     ]);
 
     const customers = custRes.data || [];
     const products = prodRes.data || [];
     const sales = salesRes.data || [];
     const invoices = invRes.data || [];
+    const authUsers = usersRes?.data?.users || [];
+
+    const userEmailMap: Record<string, string> = {};
+    for (const u of authUsers) {
+      if (u.id && u.email) {
+        userEmailMap[u.id] = u.email;
+      }
+    }
 
     // Mapear métricas por loja
     const storeMetricsMap: Record<
@@ -104,9 +115,10 @@ export async function GET(req: Request) {
       }
     }
 
-    // Enriquecer lista de lojas com as métricas
+    // Enriquecer lista de lojas com as métricas e e-mail do dono
     const enrichedStores = (stores || []).map((s) => ({
       ...s,
+      owner_email: userEmailMap[s.owner_id] || "Não informado",
       metrics: storeMetricsMap[s.id] || {
         customersCount: 0,
         productsCount: 0,

@@ -63,7 +63,7 @@ export default function LoginPage() {
           alert("Loja criada com sucesso!");
           router.push("/admin");
         } else {
-          alert("Cadastro realizado! Se o Supabase exigir confirmação por e-mail, verifique sua caixa de entrada, ou faça login com suas credenciais.");
+          alert("Cadastro realizado com sucesso! Se for exigida confirmação por e-mail, verifique sua caixa de entrada, ou faça login com suas credenciais.");
           setIsSignUp(false);
         }
       } else {

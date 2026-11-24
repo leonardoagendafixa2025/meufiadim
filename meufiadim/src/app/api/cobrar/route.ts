@@ -71,7 +71,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ ok: true });
   } catch {
     return NextResponse.json(
-      { error: "Não foi possível conectar à API Baileys." },
+      { error: "Não foi possível conectar ao serviço de mensagens." },
       { status: 500 }
     );
   }

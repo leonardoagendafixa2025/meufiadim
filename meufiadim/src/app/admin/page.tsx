@@ -374,7 +374,7 @@ export default function AdminDashboardPage() {
 
       if (!res.ok) {
         const data = await res.json();
-        alert(`Erro ao enviar: ${data.error || "verifique sua API Baileys"}`);
+        alert(`Erro ao enviar: ${data.error || "serviço de mensagens indisponível"}`);
         return;
       }
 
@@ -962,7 +962,7 @@ export default function AdminDashboardPage() {
                 />
                 {uploadingImg && (
                   <p className="text-xs text-emerald-600 font-bold animate-pulse">
-                    Enviando imagem para Cloudinary...
+                    Otimizando e enviando imagem...
                   </p>
                 )}
                 {logoUrl && (
@@ -1339,7 +1339,7 @@ export default function AdminDashboardPage() {
             />
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-700 block">
-                Foto do produto (Cloudinary)
+                Foto do produto
               </label>
               <input
                 type="file"
@@ -1350,7 +1350,7 @@ export default function AdminDashboardPage() {
               />
               {uploadingImg && (
                 <p className="text-xs text-emerald-600 font-bold animate-pulse">
-                  Enviando foto para Cloudinary...
+                  Otimizando e enviando foto...
                 </p>
               )}
               {pImg && (

@@ -44,7 +44,16 @@ export async function PATCH(req: Request) {
     }
 
     // Apenas campos permitidos para alteração pelo SuperAdmin
-    const allowedFields = ["commission_rate", "billing_cycle", "status"];
+    const allowedFields = [
+      "name",
+      "slug",
+      "whatsapp",
+      "pix_key",
+      "pix_city",
+      "commission_rate",
+      "billing_cycle",
+      "status",
+    ];
     const filteredPatch: Record<string, any> = {};
     for (const key of Object.keys(patch)) {
       if (allowedFields.includes(key)) {
