@@ -276,6 +276,15 @@ export default function SuperAdminPage() {
     msg?: string;
   } | null>(null);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string | null>(null);
+  const [customTemplates, setCustomTemplates] = useState<
+    { id: string; tag: string; title: string; message: string; isCustom?: boolean }[]
+  >([]);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [editingTemplateId, setEditingTemplateId] = useState<string | null>(null);
+  const [tplTag, setTplTag] = useState("");
+  const [tplTitle, setTplTitle] = useState("");
+  const [tplMessage, setTplMessage] = useState("");
+  const [savingTemplate, setSavingTemplate] = useState(false);
 
   // Modelos Prontos de Comunicação
   const CAMPAIGN_TEMPLATES = useMemo(
@@ -296,7 +305,7 @@ export default function SuperAdminPage() {
         id: "fechamento_ciclo",
         tag: "Financeiro",
         title: "Lembrete de Ciclo / Comissão",
-        message: `Olá, gestor(a) da *{nome_loja}*! 💳\n\nPassando para lembrar que o ciclo de comissão ({comissao}) da sua loja está em andamento na plataforma *MeuFiadim*.\n\nVocê pode consultar seu extrato de vendas e faturas a qualquer momento pelo seu painel administrativo.\n\nObrigado por ser nosso parceiro!`,
+        message: `Olá, gestor(a) da *{nome_loja}*! 💳\n\nPassando para lembrar que o ciclo de comissão ({comissao}) da sua loja está em andamento na plataforma *MeuFiadim*.\n\nVocê pode consultar seu extrato de vendas e cobranças a qualquer momento pelo seu painel administrativo.\n\nObrigado por ser nosso parceiro!`,
       },
       {
         id: "comunicado_oficial",
@@ -310,8 +319,34 @@ export default function SuperAdminPage() {
         title: "Campanha de Fidelização",
         message: `Atenção, *{nome_loja}*! 🚀\n\nOrganize suas contas a receber neste mês e comprove a praticidade de ter todo o fiado sob controle com cobranças automáticas no WhatsApp.\n\nAcesse seu painel agora:\n👉 {link_loja}`,
       },
+      {
+        id: "encomendas_novo",
+        tag: "Encomendas",
+        title: "Novo: Encomendas Programadas",
+        message: `Novidade na *{nome_loja}*! 📦✨\n\nAgora o *MeuFiadim* tem o módulo completo de *Encomendas com Pagamento Programado*! Registre pedidos antecipados com data combinada de acerto e o robô cobra o cliente automaticamente no dia.\n\nAcesse seu painel e experimente na aba *Encomendas*!`,
+      },
+      {
+        id: "infinitepay_aviso",
+        tag: "InfinitePay",
+        title: "Pagamento via InfinitePay",
+        message: `Olá, *{nome_loja}*! 🔒\n\nPara sua comodidade e segurança, suas cobranças administrativas agora contam com pagamento integrado via *InfinitePay (Pix ou Cartão)* com confirmação e liberação automática em segundos direto no seu painel!\n\nQualquer dúvida, conte com o nosso suporte.`,
+      },
+      {
+        id: "reativacao_bloqueada",
+        tag: "Reativação",
+        title: "Regularizar Loja Pausada",
+        message: `Olá, equipe da *{nome_loja}*! ⚠️\n\nNotamos uma pendência financeira em aberto que pausou temporariamente o seu painel e vitrine.\n\nPara reativar na hora com Pix ou Cartão, acesse seu painel admin e clique em *PAGAR AGORA* na aba *Cobranças*. Assim que confirmar, sua loja volta ao ar automaticamente!`,
+      },
     ],
     []
+  );
+
+  const allTemplates = useMemo(
+    () => [
+      ...CAMPAIGN_TEMPLATES.map((t) => ({ ...t, isCustom: false })),
+      ...customTemplates.map((t) => ({ ...t, isCustom: true })),
+    ],
+    [CAMPAIGN_TEMPLATES, customTemplates]
   );
 
   // Loja de exemplo para a prévia em tempo real
@@ -360,11 +395,96 @@ export default function SuperAdminPage() {
     setCampaignMessage((prev) => `${prev}${prefix}texto${suffix}`);
   }
 
-  function applyTemplate(tpl: (typeof CAMPAIGN_TEMPLATES)[0]) {
+  function applyTemplate(tpl: { id: string; tag: string; title: string; message: string }) {
     setSelectedTemplateId(tpl.id);
     setCampaignTitle(tpl.title);
     setCampaignMessage(tpl.message);
     showToast(`Modelo "${tpl.title}" aplicado com sucesso!`);
+  }
+
+  function openNewTemplateModal(prefillFromEditor = false) {
+    setEditingTemplateId(null);
+    setTplTag("Personalizado");
+    setTplTitle(prefillFromEditor ? campaignTitle : "");
+    setTplMessage(prefillFromEditor ? campaignMessage : "");
+    setShowTemplateModal(true);
+  }
+
+  function openEditTemplateModal(tpl: { id: string; tag: string; title: string; message: string }) {
+    setEditingTemplateId(tpl.id);
+    setTplTag(tpl.tag);
+    setTplTitle(tpl.title);
+    setTplMessage(tpl.message);
+    setShowTemplateModal(true);
+  }
+
+  async function persistCustomTemplates(
+    nextList: { id: string; tag: string; title: string; message: string }[]
+  ) {
+    const token = await getAccessToken();
+    if (!token) throw new Error("Sessão expirada.");
+    const res = await fetch("/api/superadmin/settings", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({
+        custom_campaign_templates: nextList,
+      }),
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Erro ao salvar modelos.");
+    setCustomTemplates(data.customTemplates || nextList);
+  }
+
+  async function handleSaveCustomTemplate(e: React.FormEvent) {
+    e.preventDefault();
+    if (!tplTitle.trim() || !tplMessage.trim()) {
+      showToast("Preencha o título e o texto do modelo.", "error");
+      return;
+    }
+
+    try {
+      setSavingTemplate(true);
+      const tagClean = tplTag.trim() || "Personalizado";
+      let nextList = [...customTemplates];
+
+      if (editingTemplateId) {
+        nextList = nextList.map((t) =>
+          t.id === editingTemplateId
+            ? { ...t, tag: tagClean, title: tplTitle.trim(), message: tplMessage }
+            : t
+        );
+      } else {
+        nextList.push({
+          id: `custom_${Date.now()}`,
+          tag: tagClean,
+          title: tplTitle.trim(),
+          message: tplMessage,
+        });
+      }
+
+      await persistCustomTemplates(nextList);
+      setShowTemplateModal(false);
+      showToast(editingTemplateId ? "Modelo atualizado com sucesso!" : "Novo modelo criado e salvo!");
+    } catch (err: any) {
+      showToast(err.message, "error");
+    } finally {
+      setSavingTemplate(false);
+    }
+  }
+
+  async function handleDeleteCustomTemplate(id: string) {
+    if (!confirm("Excluir este modelo personalizado?")) return;
+    try {
+      const nextList = customTemplates.filter((t) => t.id !== id);
+      await persistCustomTemplates(nextList);
+      if (selectedTemplateId === id) setSelectedTemplateId(null);
+      showToast("Modelo removido com sucesso.");
+    } catch (err: any) {
+      showToast(err.message, "error");
+    }
   }
 
   async function handleSendTestCampaign() {
@@ -553,6 +673,9 @@ export default function SuperAdminPage() {
       setInvoices(data.invoices);
       if (data.campaigns && Array.isArray(data.campaigns)) {
         setCampaignsHistory(data.campaigns);
+      }
+      if (data.customTemplates && Array.isArray(data.customTemplates)) {
+        setCustomTemplates(data.customTemplates);
       }
       if (data.settings) {
         setAdminPixKey(data.settings.pix_key || "");
@@ -1934,39 +2057,87 @@ export default function SuperAdminPage() {
 
             {/* Passo 2: Modelos Prontos de Comunicação */}
             <div className="bg-white rounded-3xl p-6 sm:p-7 border border-slate-200/70 shadow-sm shadow-slate-200/50 space-y-4">
-              <div>
-                <h2 className="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-purple-600" />
-                  2. Escolha um Modelo Rápido de Alta Conversão
-                </h2>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Clique para carregar uma mensagem pré-formatada e pronta para disparo, ou edite como preferir.
-                </p>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-purple-600" />
+                    2. Escolha um Modelo Rápido de Alta Conversão
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Clique para carregar uma mensagem pré-formatada e pronta para disparo, ou crie seus próprios modelos reutilizáveis.
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => openNewTemplateModal(false)}
+                  className="px-3.5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white text-xs font-extrabold flex items-center gap-1.5 shadow-sm shadow-purple-600/20 active:scale-95 transition self-start sm:self-auto shrink-0"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Criar Novo Modelo</span>
+                </button>
               </div>
 
               <div className="flex flex-wrap gap-2.5">
-                {CAMPAIGN_TEMPLATES.map((tpl) => (
-                  <button
+                {allTemplates.map((tpl) => (
+                  <div
                     key={tpl.id}
-                    type="button"
-                    onClick={() => applyTemplate(tpl)}
-                    className={`px-3.5 py-2.5 rounded-xl text-xs font-bold border transition-all duration-150 flex items-center gap-2 active:scale-95 ${
+                    className={`inline-flex items-center rounded-xl border transition-all duration-150 ${
                       selectedTemplateId === tpl.id
                         ? "bg-purple-600 text-white border-purple-600 shadow-sm shadow-purple-600/20"
+                        : tpl.isCustom
+                        ? "bg-indigo-50/70 hover:bg-indigo-100/70 text-slate-800 border-indigo-200"
                         : "bg-slate-50 hover:bg-slate-100 text-slate-700 border-slate-200/80 hover:border-slate-300"
                     }`}
                   >
-                    <span
-                      className={`text-[10px] uppercase font-extrabold px-1.5 py-0.5 rounded ${
-                        selectedTemplateId === tpl.id
-                          ? "bg-white/20 text-white"
-                          : "bg-purple-100 text-purple-700"
-                      }`}
+                    <button
+                      type="button"
+                      onClick={() => applyTemplate(tpl)}
+                      className="px-3.5 py-2.5 text-xs font-bold flex items-center gap-2 active:scale-95 transition"
                     >
-                      {tpl.tag}
-                    </span>
-                    <span>{tpl.title}</span>
-                  </button>
+                      <span
+                        className={`text-[10px] uppercase font-extrabold px-1.5 py-0.5 rounded ${
+                          selectedTemplateId === tpl.id
+                            ? "bg-white/20 text-white"
+                            : tpl.isCustom
+                            ? "bg-indigo-100 text-indigo-700"
+                            : "bg-purple-100 text-purple-700"
+                        }`}
+                      >
+                        {tpl.tag}
+                      </span>
+                      <span>{tpl.title}</span>
+                    </button>
+
+                    {tpl.isCustom && (
+                      <div className="flex items-center pr-2 gap-1 border-l border-black/10 pl-1.5">
+                        <button
+                          type="button"
+                          onClick={() => openEditTemplateModal(tpl)}
+                          title="Editar modelo"
+                          className={`p-1 rounded-lg transition ${
+                            selectedTemplateId === tpl.id
+                              ? "hover:bg-white/20 text-white"
+                              : "hover:bg-white text-slate-500 hover:text-indigo-700"
+                          }`}
+                        >
+                          <Pencil className="w-3 h-3" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteCustomTemplate(tpl.id)}
+                          title="Excluir modelo"
+                          className={`p-1 rounded-lg transition ${
+                            selectedTemplateId === tpl.id
+                              ? "hover:bg-white/20 text-white"
+                              : "hover:bg-white text-slate-400 hover:text-rose-600"
+                          }`}
+                        >
+                          <Trash2 className="w-3 h-3" />
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 ))}
               </div>
             </div>
@@ -1975,14 +2146,26 @@ export default function SuperAdminPage() {
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
               {/* Coluna Esquerda: Editor (7 Colunas) */}
               <div className="lg:col-span-7 bg-white rounded-3xl p-6 sm:p-7 border border-slate-200/70 shadow-sm shadow-slate-200/50 space-y-5">
-                <div>
-                  <h2 className="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-2">
-                    <Pencil className="w-4 h-4 text-purple-600" />
-                    3. Redija a Mensagem do Comunicado
-                  </h2>
-                  <p className="text-xs text-slate-500 mt-0.5">
-                    Utilize as variáveis automáticas para personalizar o texto para cada lojista.
-                  </p>
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-sm sm:text-base font-extrabold text-slate-900 flex items-center gap-2">
+                      <Pencil className="w-4 h-4 text-purple-600" />
+                      3. Redija a Mensagem do Comunicado
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-0.5">
+                      Utilize as variáveis automáticas para personalizar o texto para cada lojista.
+                    </p>
+                  </div>
+                  {campaignMessage.trim() && (
+                    <button
+                      type="button"
+                      onClick={() => openNewTemplateModal(true)}
+                      className="px-3 py-1.5 rounded-xl bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-extrabold flex items-center gap-1.5 shrink-0 self-start sm:self-auto transition"
+                    >
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Salvar texto como Modelo</span>
+                    </button>
+                  )}
                 </div>
 
                 {/* Título Interno */}
@@ -2334,6 +2517,111 @@ export default function SuperAdminPage() {
                 </div>
               )}
             </div>
+          </div>
+        )}
+
+        {/* MODAL: CRIAR / EDITAR MODELO PERSONALIZADO */}
+        {showTemplateModal && (
+          <div className="fixed inset-0 z-50 bg-slate-950/70 backdrop-blur-sm flex items-center justify-center p-4">
+            <form
+              onSubmit={handleSaveCustomTemplate}
+              className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg font-black text-slate-900">
+                    {editingTemplateId ? "Editar Modelo de Mensagem" : "Criar Novo Modelo Rápido"}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Salvo na sua conta para disparar em 1 clique sempre que precisar.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowTemplateModal(false)}
+                  className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-extrabold text-slate-700 block">
+                    Etiqueta / Tag *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={20}
+                    placeholder="Ex: PROMOÇÃO, VIP"
+                    value={tplTag}
+                    onChange={(e) => setTplTag(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold uppercase"
+                  />
+                </div>
+                <div className="sm:col-span-2 space-y-1">
+                  <label className="text-xs font-extrabold text-slate-700 block">
+                    Título do Botão *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    maxLength={45}
+                    placeholder="Ex: Aviso de Black Friday / Suporte"
+                    value={tplTitle}
+                    onChange={(e) => setTplTitle(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-bold"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-extrabold text-slate-700">
+                    Texto da Mensagem *
+                  </label>
+                  <div className="flex gap-1">
+                    {["{nome_loja}", "{link_loja}", "{comissao}"].map((tag) => (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => setTplMessage((prev) => `${prev}${prev ? " " : ""}${tag}`)}
+                        className="px-2 py-0.5 rounded-md bg-purple-50 hover:bg-purple-100 text-purple-700 text-[10px] font-mono font-bold"
+                      >
+                        {tag}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <textarea
+                  rows={6}
+                  required
+                  placeholder="Olá, *{nome_loja}*! ..."
+                  value={tplMessage}
+                  onChange={(e) => setTplMessage(e.target.value)}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-slate-200 text-xs font-medium leading-relaxed"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2.5 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setShowTemplateModal(false)}
+                  className="py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 font-extrabold text-xs"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingTemplate}
+                  className="py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-black text-xs flex items-center justify-center gap-1.5 disabled:opacity-60"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>{savingTemplate ? "Salvando..." : "Salvar Modelo"}</span>
+                </button>
+              </div>
+            </form>
           </div>
         )}
 

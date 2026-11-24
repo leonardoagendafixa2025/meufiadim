@@ -68,17 +68,22 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json();
-    const { pix_key, pix_name, pix_city, whatsapp } = body;
+    const { pix_key, pix_name, pix_city, whatsapp, custom_campaign_templates } = body;
+
+    const existingMeta = user.user_metadata || {};
+    const nextMeta: Record<string, any> = { ...existingMeta };
+
+    if (pix_key !== undefined) nextMeta.pix_key = String(pix_key).trim();
+    if (pix_name !== undefined) nextMeta.pix_name = String(pix_name).trim() || "MeuFiadim Plataforma";
+    if (pix_city !== undefined) nextMeta.pix_city = String(pix_city).trim() || "BRASILIA";
+    if (whatsapp !== undefined) nextMeta.whatsapp = String(whatsapp).replace(/\D/g, "");
+    if (Array.isArray(custom_campaign_templates)) {
+      nextMeta.custom_campaign_templates = custom_campaign_templates;
+    }
 
     const { data: updated, error: updateError } =
       await supabaseAdmin.auth.admin.updateUserById(user.id, {
-        user_metadata: {
-          ...(user.user_metadata || {}),
-          pix_key: (pix_key || "").trim(),
-          pix_name: (pix_name || "").trim() || "MeuFiadim Plataforma",
-          pix_city: (pix_city || "").trim() || "BRASILIA",
-          whatsapp: (whatsapp || "").replace(/\D/g, ""),
-        },
+        user_metadata: nextMeta,
       });
 
     if (updateError) {
@@ -93,6 +98,7 @@ export async function POST(req: Request) {
         pix_city: updated.user.user_metadata.pix_city,
         whatsapp: updated.user.user_metadata.whatsapp,
       },
+      customTemplates: updated.user.user_metadata.custom_campaign_templates || [],
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

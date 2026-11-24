@@ -162,6 +162,7 @@ export async function GET(req: Request) {
       whatsapp: meta.whatsapp || "",
     };
     const campaigns = meta.campaigns_history || [];
+    const customTemplates = meta.custom_campaign_templates || [];
 
     return NextResponse.json({
       stats: {
@@ -179,6 +180,7 @@ export async function GET(req: Request) {
       invoices,
       settings,
       campaigns,
+      customTemplates,
     });
   } catch (err: any) {
     return NextResponse.json(
