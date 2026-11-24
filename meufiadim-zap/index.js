@@ -10,6 +10,8 @@ const {
   useMultiFileAuthState,
   DisconnectReason,
   fetchLatestBaileysVersion,
+  makeCacheableSignalKeyStore,
+  Browsers,
 } = require("@whiskeysockets/baileys");
 const { Boom } = require("@hapi/boom");
 const qrcodeTerminal = require("qrcode-terminal");
@@ -82,12 +84,18 @@ async function restoreSessionFromSupabase() {
   }
 }
 
-// 2. Salva todos os arquivos de sessão no Supabase Storage (com debounce)
+// 2. Salva todos os arquivos de sessão no Supabase Storage (com debounce e lock)
 let syncTimeout = null;
+let isBackingUp = false;
 function scheduleSessionBackup() {
   if (!supabase) return;
   if (syncTimeout) clearTimeout(syncTimeout);
   syncTimeout = setTimeout(async () => {
+    if (isBackingUp) {
+      scheduleSessionBackup();
+      return;
+    }
+    isBackingUp = true;
     try {
       if (!fs.existsSync(AUTH_DIR)) return;
       const files = fs.readdirSync(AUTH_DIR);
@@ -98,9 +106,11 @@ function scheduleSessionBackup() {
           await supabase.storage.from(BUCKET).upload(fileName, content, { upsert: true });
         }
       }
-      console.log("☁️ Sessão sincronizada no Supabase Storage com sucesso!");
+      console.log(`☁️ Sessão sincronizada no Supabase Storage (${files.length} arquivos)!`);
     } catch (err) {
       console.warn("⚠️ Falha ao fazer backup da sessão:", err?.message || err);
+    } finally {
+      isBackingUp = false;
     }
   }, 2500);
 }
@@ -124,6 +134,26 @@ let sock = null;
 let isConnected = false;
 let latestQR = null;
 
+// Cache de mensagens enviadas para atender Retry Receipts (resolve "Aguardando mensagem...")
+const sentMessageStore = new Map();
+const assertedJidsAt = new Map();
+
+function rememberSentMessage(sent) {
+  if (sent?.key?.id && sent?.message) {
+    sentMessageStore.set(sent.key.id, {
+      message: sent.message,
+      ts: Date.now(),
+    });
+    // Limpa entradas antigas (> 12h)
+    if (sentMessageStore.size > 500) {
+      const cutoff = Date.now() - 12 * 60 * 60 * 1000;
+      for (const [k, v] of sentMessageStore.entries()) {
+        if (v.ts < cutoff) sentMessageStore.delete(k);
+      }
+    }
+  }
+}
+
 async function connectToWhatsApp() {
   try {
     await restoreSessionFromSupabase();
@@ -139,15 +169,32 @@ async function connectToWhatsApp() {
       console.warn("⚠️ Aviso: Usando versão estável do motor:", verErr.message);
     }
 
+    const baileysLogger = pino({ level: "silent" });
+
     sock = makeWASocket({
       version,
-      auth: state,
-      logger: pino({ level: "silent" }),
+      browser: Browsers.ubuntu("Chrome"),
+      auth: {
+        creds: state.creds,
+        keys: makeCacheableSignalKeyStore(state.keys, baileysLogger),
+      },
+      logger: baileysLogger,
       printQRInTerminal: false,
+      markOnlineOnConnect: false,
+      syncFullHistory: false,
+      generateHighQualityLinkPreview: false,
+      getMessage: async (key) => {
+        const entry = key?.id ? sentMessageStore.get(key.id) : null;
+        return entry?.message || undefined;
+      },
     });
 
     sock.ev.on("creds.update", async () => {
       await saveCreds();
+      scheduleSessionBackup();
+    });
+
+    sock.ev.on("messages.upsert", () => {
       scheduleSessionBackup();
     });
 
@@ -193,16 +240,58 @@ async function connectToWhatsApp() {
 async function sendChargeMessages(phone, text, pixCode) {
   const cleanPhone = String(phone).replace(/\D/g, "");
   const formatted = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
-  const [result] = await sock.onWhatsApp(`${formatted}@s.whatsapp.net`);
 
-  if (!result?.exists) throw new Error("Número não encontrado no WhatsApp");
+  // Tenta localizar o JID exato (com tratamento para o 9º dígito brasileiro)
+  let candidates = [`${formatted}@s.whatsapp.net`];
+  if (formatted.length === 13 && formatted.startsWith("55")) {
+    // Tenta também sem o 9º dígito caso a conta WhatsApp esteja registrada no formato antigo
+    const withoutNine = `${formatted.slice(0, 4)}${formatted.slice(5)}`;
+    candidates.push(`${withoutNine}@s.whatsapp.net`);
+  } else if (formatted.length === 12 && formatted.startsWith("55")) {
+    // Tenta também com o 9º dígito
+    const withNine = `${formatted.slice(0, 4)}9${formatted.slice(4)}`;
+    candidates.push(`${withNine}@s.whatsapp.net`);
+  }
 
-  await sock.sendMessage(result.jid, { text });
+  let targetJid = null;
+  for (const candidate of candidates) {
+    const res = await sock.onWhatsApp(candidate);
+    const first = Array.isArray(res) ? res[0] : res;
+    if (first?.exists && first?.jid) {
+      targetJid = first.jid;
+      break;
+    }
+  }
+
+  if (!targetJid) throw new Error("Número não encontrado no WhatsApp");
+
+  // Garante sessão Signal atualizada com o destinatário E com o próprio aparelho principal (DSM)
+  try {
+    const jidsToAssert = [targetJid];
+    const ownRaw = sock?.user?.id;
+    if (ownRaw) {
+      const ownBase = `${ownRaw.split(":")[0].split("@")[0]}@s.whatsapp.net`;
+      jidsToAssert.push(ownBase);
+    }
+    const lastAssert = assertedJidsAt.get(targetJid) || 0;
+    const forceAssert = Date.now() - lastAssert > 30 * 60 * 1000;
+    await sock.assertSessions(jidsToAssert, forceAssert);
+    assertedJidsAt.set(targetJid, Date.now());
+  } catch (e) {
+    console.warn("⚠️ Aviso ao sincronizar sessão Signal:", e?.message || e);
+  }
+
+  const sentMain = await sock.sendMessage(targetJid, { text });
+  rememberSentMessage(sentMain);
 
   if (pixCode) {
     await new Promise((r) => setTimeout(r, 1500));
-    await sock.sendMessage(result.jid, { text: pixCode });
+    const sentPix = await sock.sendMessage(targetJid, { text: pixCode });
+    rememberSentMessage(sentPix);
   }
+
+  // Persiste os arquivos session-*.json gerados/atualizados após o envio
+  scheduleSessionBackup();
 }
 
 app.get("/status", (req, res) => {
