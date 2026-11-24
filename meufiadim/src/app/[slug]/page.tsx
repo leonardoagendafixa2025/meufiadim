@@ -162,9 +162,6 @@ export default function TenantStorePage() {
   const [selectedProductDetails, setSelectedProductDetails] = useState<Product | null>(null);
   const [modalQty, setModalQty] = useState(1);
 
-  // Modal de Reserva
-  const [reserveModalOpen, setReserveModalOpen] = useState(false);
-
   // Modal de Consulta de Frete por CEP no Cabeçalho
   const [freightModalOpen, setFreightModalOpen] = useState(false);
   const [modalCepInput, setModalCepInput] = useState("");
@@ -556,14 +553,8 @@ export default function TenantStorePage() {
             <ArrowLeft className="w-5 h-5 stroke-[2]" />
           </button>
 
-          {/* Ações à direita: Chip de tempo, Tema e Perfil */}
+          {/* Ações à direita: Tema e Perfil */}
           <div className="flex items-center gap-2">
-            {/* Chip de tempo estimado */}
-            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 shadow-xs">
-              <Clock className="w-3.5 h-3.5 text-slate-400" />
-              <span>{deliveryTime}</span>
-            </div>
-
             {/* Alternador de tema Claro / Escuro */}
             <button
               onClick={() => setIsDark((prev) => !prev)}
@@ -679,15 +670,6 @@ export default function TenantStorePage() {
                 <span>Mín {formatBRL(minOrder)}</span>
               </div>
             )}
-
-            {/* Botão Reservar (Pill destacado) */}
-            <button
-              onClick={() => setReserveModalOpen(true)}
-              className="inline-flex items-center gap-1 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 px-3 py-1 rounded-full border border-amber-200 dark:border-amber-800/70 font-bold active:scale-95 transition-all ml-auto hover:bg-amber-100"
-            >
-              <Calendar className="w-3.5 h-3.5" />
-              <span>Reservar</span>
-            </button>
           </div>
 
           {/* Seletor Segmentado: ENTREGA x RETIRADA */}
@@ -1113,50 +1095,7 @@ export default function TenantStorePage() {
         </div>
       )}
 
-      {/* 9. MODAL DE RESERVA */}
-      {reserveModalOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-3xl p-6 shadow-2xl border border-slate-100 dark:border-slate-800 space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-amber-500" />
-                <h3 className="font-black text-lg text-slate-900 dark:text-white">
-                  Reservar na Loja
-                </h3>
-              </div>
-              <button
-                onClick={() => setReserveModalOpen(false)}
-                className="p-1 rounded-full text-slate-400 hover:text-slate-600"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <p className="text-xs text-slate-600 dark:text-slate-300">
-              Deseja reservar mesa ou separar produtos para retirada agendada? Fale direto no WhatsApp do estabelecimento:
-            </p>
-            <button
-              onClick={() => {
-                const phone = (store.whatsapp || "").replace(/\D/g, "");
-                const formattedPhone = phone.startsWith("55") ? phone : `55${phone}`;
-                window.open(
-                  `https://wa.me/${formattedPhone}?text=${encodeURIComponent(
-                    `Olá! Gostaria de fazer uma reserva/agendamento no estabelecimento ${store.name}.`
-                  )}`,
-                  "_blank"
-                );
-                setReserveModalOpen(false);
-              }}
-              style={{ backgroundColor: brandColor }}
-              className="w-full text-white py-3 rounded-2xl font-black text-sm flex items-center justify-center gap-2 shadow-md active:scale-95"
-            >
-              <MessageCircle className="w-4 h-4" />
-              <span>Chamar no WhatsApp</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* 9.1 MODAL DE CÁLCULO DE FRETE POR CEP NO CABEÇALHO */}
+      {/* MODAL DE CÁLCULO DE FRETE POR CEP NO CABEÇALHO */}
       {freightModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
           <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-[28px] p-6 shadow-2xl border border-slate-100 dark:border-slate-800 space-y-4">
