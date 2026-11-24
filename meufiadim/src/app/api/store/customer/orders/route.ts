@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/encomendas";
-import { cleanPhone } from "@/lib/customer-auth";
+import { cleanPhone, formatPhoneBR } from "@/lib/customer-auth";
+import { formatBRL, getZapApiUrl, getZapApiKey } from "@/lib/whatsapp";
 
 export const dynamic = "force-dynamic";
 
@@ -115,7 +116,7 @@ export async function POST(req: Request) {
     // 1. Validar loja e status de abertura
     const { data: store, error: storeErr } = await supabase
       .from("stores")
-      .select("id, name, commission_rate, is_open, status")
+      .select("id, name, whatsapp, pix_key, pix_city, commission_rate, is_open, status")
       .eq("id", storeId)
       .maybeSingle();
 
@@ -228,10 +229,124 @@ export async function POST(req: Request) {
         .eq("id", customer.id);
     }
 
+    // 5. Disparo automático via Baileys (WhatsApp Bot API) para Lojista e Cliente
+    const zapUrl = getZapApiUrl();
+    const zapKey = getZapApiKey();
+    let merchantNotified = false;
+    let customerNotified = false;
+
+    const itemsLines = Array.isArray(items) && items.length > 0
+      ? items
+          .map(
+            (i: any) =>
+              `• ${i.qty}x ${i.name || i.product?.name || "Item"} — ${formatBRL(Number(i.price || 0) * Number(i.qty || 1))}`
+          )
+          .join("\n")
+      : formattedDescription;
+
+    const parsedFreight = Number(freightFee || 0);
+    const parsedSubtotal = Number(Math.max(0, parsedTotal - (deliveryType === "retirada" ? 0 : parsedFreight)).toFixed(2));
+
+    // 5a. Notificar Lojista automaticamente
+    if (store.whatsapp) {
+      try {
+        const merchantLines = [
+          `🛍️ *NOVO PEDIDO RECEBIDO — ${store.name}*`,
+          ``,
+          `👤 *Cliente:* ${customer.name}`,
+          `📱 *WhatsApp:* ${formatPhoneBR(customer.phone)}`,
+          `🛵 *Modalidade:* ${deliveryType === "retirada" ? "RETIRADA NA LOJA" : "ENTREGA EM DOMICÍLIO"}`,
+          address ? address : (deliveryType === "retirada" ? "🏬 Retirada no balcão da loja" : ""),
+          `💳 *Forma de Pagamento:* ${paymentMethod || "Pix"}`,
+          ``,
+          `📋 *ITENS DO PEDIDO:*`,
+          itemsLines,
+          ``,
+          `Subtotal: ${formatBRL(parsedSubtotal)}`,
+          deliveryType === "retirada"
+            ? `Frete: Grátis (Retirada)`
+            : `Taxa de Entrega: ${formatBRL(parsedFreight)}`,
+          `💰 *VALOR TOTAL: ${formatBRL(parsedTotal)}*`,
+        ];
+
+        if (notes && String(notes).trim()) {
+          merchantLines.push(``, `📝 *Observações:* ${String(notes).trim()}`);
+        }
+
+        const resMerchant = await fetch(`${zapUrl}/send`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": zapKey,
+          },
+          body: JSON.stringify({
+            phone: cleanPhone(store.whatsapp),
+            text: merchantLines.filter(Boolean).join("\n"),
+          }),
+        });
+
+        merchantNotified = resMerchant.ok;
+      } catch (err) {
+        console.error("Erro ao notificar lojista via Baileys:", err);
+      }
+    }
+
+    // 5b. Enviar confirmação automática ao Cliente (com Pix Copia e Cola se pagamento for Pix e loja tiver chave)
+    if (customer.phone) {
+      try {
+        const firstName = customer.name.split(" ")[0];
+        const customerLines = [
+          `Olá, *${firstName}*! 👋`,
+          ``,
+          `Seu pedido na *${store.name}* foi recebido e confirmado com sucesso! ✅`,
+          ``,
+          `📋 *ITENS:*`,
+          itemsLines,
+          ``,
+          `💳 *Pagamento:* ${paymentMethod || "Pix"}`,
+          `💰 *Total:* ${formatBRL(parsedTotal)}`,
+          `🛵 *Modalidade:* ${deliveryType === "retirada" ? "Retirada na loja" : "Entrega em domicílio"}`,
+        ];
+
+        if (paymentMethod === "Pix" && store.pix_key) {
+          customerLines.push(``, `Para pagar agora, toque em *"Copiar código Pix"* na mensagem abaixo 👇`);
+        } else {
+          customerLines.push(``, `Você pode acompanhar seu histórico de compras a qualquer momento na vitrine da loja. Obrigado pela preferência!`);
+        }
+
+        const resCustomer = await fetch(`${zapUrl}/send`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-api-key": zapKey,
+          },
+          body: JSON.stringify({
+            phone: cleanPhone(customer.phone),
+            text: customerLines.join("\n"),
+            pix:
+              paymentMethod === "Pix" && store.pix_key
+                ? {
+                    pixKey: store.pix_key,
+                    merchantName: store.name || "MEUFIADIM",
+                    merchantCity: store.pix_city || "BRASIL",
+                    amount: parsedTotal,
+                  }
+                : null,
+          }),
+        });
+
+        customerNotified = resCustomer.ok;
+      } catch (err) {
+        console.error("Erro ao notificar cliente via Baileys:", err);
+      }
+    }
+
     return NextResponse.json({
       success: true,
       message: "Pedido registrado com sucesso!",
       sale: saleRecord,
+      merchantNotified,
+      customerNotified,
     });
   } catch (error: any) {
     return NextResponse.json(

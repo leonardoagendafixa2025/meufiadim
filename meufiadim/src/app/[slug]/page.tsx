@@ -173,6 +173,13 @@ export default function TenantStorePage() {
   const [authPromptMessage, setAuthPromptMessage] = useState<string | undefined>(undefined);
   const [showOrdersModal, setShowOrdersModal] = useState(false);
   const [submittingOrder, setSubmittingOrder] = useState(false);
+  const [orderSuccessInfo, setOrderSuccessInfo] = useState<{
+    total: number;
+    paymentMethod: string;
+    merchantNotified: boolean;
+    customerNotified: boolean;
+    whatsappFallbackUrl?: string;
+  } | null>(null);
 
   // Modal de Detalhes do Produto
   const [selectedProductDetails, setSelectedProductDetails] = useState<Product | null>(null);
@@ -569,38 +576,37 @@ export default function TenantStorePage() {
         );
       }
 
-      // 2. Gerar mensagem para o WhatsApp com identificação do cliente
-      const lines = [
-        `🛍️ *NOVO PEDIDO — ${store?.name || "Cardápio"}*`,
-        ``,
-        `👤 *Cliente:* ${customerUser.name} (${formatPhoneBR(customerUser.phone)})`,
-        `🛵 *Modalidade:* ${deliveryType === "retirada" ? "RETIRADA NA LOJA" : "ENTREGA EM DOMICÍLIO"}`,
-        destinationAddress,
-        `💳 *Forma de Pagamento:* ${paymentMethod}`,
-        ``,
-        `📋 *ITENS:*`,
-        itemsText,
-        ``,
-        `Subtotal: ${formatBRL(subtotalPrice)}`,
-        deliveryType === "entrega" ? `Taxa de Entrega: ${formatBRL(deliveryCost)}` : `Frete: Grátis (Retirada)`,
-        `💰 *VALOR TOTAL: ${formatBRL(finalTotalPrice)}*`,
-      ];
-
-      if (notes.trim()) {
-        lines.push(``, `📝 *Observações:* ${notes.trim()}`);
-      }
-
+      // 2. Montar link de fallback apenas se o robô Baileys estiver offline no momento
       const phone = (store?.whatsapp || "").replace(/\D/g, "");
       const formattedPhone = phone.startsWith("55") ? phone : `55${phone}`;
-
-      window.open(
-        `https://wa.me/${formattedPhone}?text=${encodeURIComponent(lines.join("\n"))}`,
-        "_blank"
-      );
+      const fallbackLines = [
+        `NOVO PEDIDO - ${store?.name || "Cardápio"}`,
+        ``,
+        `Cliente: ${customerUser.name} (${formatPhoneBR(customerUser.phone)})`,
+        `Modalidade: ${deliveryType === "retirada" ? "RETIRADA NA LOJA" : "ENTREGA EM DOMICÍLIO"}`,
+        destinationAddress,
+        `Pagamento: ${paymentMethod}`,
+        ``,
+        `ITENS:`,
+        itemsText,
+        ``,
+        `VALOR TOTAL: ${formatBRL(finalTotalPrice)}`,
+      ];
+      if (notes.trim()) {
+        fallbackLines.push(`Observações: ${notes.trim()}`);
+      }
+      const whatsappFallbackUrl = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(fallbackLines.join("\n"))}`;
 
       setCart([]);
       setCartOpen(false);
-      showToast("Pedido gerado e salvo com sucesso! Redirecionando para o WhatsApp...");
+      setOrderSuccessInfo({
+        total: finalTotalPrice,
+        paymentMethod,
+        merchantNotified: Boolean(orderData.merchantNotified),
+        customerNotified: Boolean(orderData.customerNotified),
+        whatsappFallbackUrl,
+      });
+      showToast("Pedido confirmado e enviado automaticamente!");
     } catch (err: any) {
       alert("Atenção: " + (err.message || "Não foi possível salvar seu pedido. Tente novamente."));
     } finally {
@@ -1701,10 +1707,10 @@ export default function TenantStorePage() {
                     </>
                   ) : (
                     <>
-                      <MessageCircle className="w-5 h-5 stroke-[2]" />
+                      <Check className="w-5 h-5 stroke-[2.5]" />
                       <span>
                         {isOpen
-                          ? `Enviar pedido no Zap • ${formatBRL(finalTotalPrice)}`
+                          ? `Finalizar Pedido • ${formatBRL(finalTotalPrice)}`
                           : "Loja Fechada no Momento"}
                       </span>
                     </>
@@ -1773,6 +1779,78 @@ export default function TenantStorePage() {
             if (el) el.focus();
           }}
         />
+      )}
+
+      {/* MODAL DE PEDIDO CONFIRMADO AUTOMATICAMENTE VIA BAILEYS */}
+      {orderSuccessInfo && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/70 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="w-full max-w-md bg-white dark:bg-slate-900 rounded-3xl shadow-2xl border border-slate-100 dark:border-slate-800 p-6 text-center space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="w-16 h-16 rounded-full bg-emerald-100 dark:bg-emerald-950/60 text-emerald-600 dark:text-emerald-400 flex items-center justify-center mx-auto shadow-inner">
+              <Check className="w-8 h-8 stroke-[3]" />
+            </div>
+
+            <div className="space-y-1">
+              <h2 className="text-xl font-black text-slate-900 dark:text-white">
+                Pedido Confirmado!
+              </h2>
+              <p className="text-xs font-semibold text-slate-500 dark:text-slate-400">
+                Valor total: <strong className="text-slate-800 dark:text-white">{formatBRL(orderSuccessInfo.total)}</strong> • {orderSuccessInfo.paymentMethod}
+              </p>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 space-y-2 text-left text-xs">
+              <div className="flex items-center gap-2">
+                <span className={`w-2 h-2 rounded-full shrink-0 ${orderSuccessInfo.merchantNotified ? "bg-emerald-500" : "bg-amber-500"}`} />
+                <span className="font-semibold text-slate-700 dark:text-slate-200">
+                  {orderSuccessInfo.merchantNotified
+                    ? "O lojista já foi notificado automaticamente no WhatsApp!"
+                    : "Pedido salvo no sistema da loja!"}
+                </span>
+              </div>
+              {orderSuccessInfo.customerNotified && (
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                  <span className="font-semibold text-slate-700 dark:text-slate-200">
+                    Enviamos a confirmação e o resumo para o seu WhatsApp.
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {!orderSuccessInfo.merchantNotified && orderSuccessInfo.whatsappFallbackUrl && (
+              <a
+                href={orderSuccessInfo.whatsappFallbackUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="w-full py-3 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center justify-center gap-2 shadow-md transition"
+              >
+                <MessageCircle className="w-4 h-4" />
+                <span>Enviar comprovante no WhatsApp da loja</span>
+              </a>
+            )}
+
+            <div className="grid grid-cols-2 gap-2.5 pt-1">
+              <button
+                type="button"
+                onClick={() => {
+                  setOrderSuccessInfo(null);
+                  setShowOrdersModal(true);
+                }}
+                className="py-3 px-4 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-white font-black text-xs transition active:scale-95"
+              >
+                Ver Meus Pedidos
+              </button>
+              <button
+                type="button"
+                onClick={() => setOrderSuccessInfo(null)}
+                style={{ backgroundColor: brandColor }}
+                className="py-3 px-4 rounded-2xl text-white font-black text-xs shadow-md hover:opacity-95 transition active:scale-95"
+              >
+                Continuar na Loja
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* RODAPÉ */}
