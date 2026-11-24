@@ -36,6 +36,8 @@ import {
   Flame,
   Star,
   Tag,
+  CalendarClock,
+  History,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { formatBRL } from "@/lib/whatsapp";
@@ -47,6 +49,12 @@ import {
   type NeighborhoodRule,
   type CepRangeRule,
 } from "@/lib/viacep";
+import type { Encomenda } from "@/lib/encomendas";
+import { buildEncomendaWhatsAppMessage } from "@/lib/encomendas";
+import { EncomendasTab } from "@/components/EncomendasTab";
+import { NewEncomendaModal } from "@/components/NewEncomendaModal";
+import { EncomendaDetailsModal } from "@/components/EncomendaDetailsModal";
+import { CustomerHistoryModal } from "@/components/CustomerHistoryModal";
 
 interface Store {
   id: string;
@@ -109,10 +117,29 @@ export default function AdminDashboardPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
 
-  const [tab, setTab] = useState<"fiado" | "produtos" | "entrega" | "whatsapp" | "fatura">("fiado");
+  const [tab, setTab] = useState<"fiado" | "encomendas" | "produtos" | "entrega" | "whatsapp" | "fatura">("fiado");
   const [copied, setCopied] = useState(false);
   const [sendingId, setSendingId] = useState<string | null>(null);
   const [uploadingImg, setUploadingImg] = useState(false);
+
+  // Módulo de Encomendas
+  const [encomendas, setEncomendas] = useState<Encomenda[]>([]);
+  const [encomendasLoading, setEncomendasLoading] = useState(false);
+  const [encomendasKpis, setEncomendasKpis] = useState({
+    totalPendentes: 0,
+    valorTotalAReceber: 0,
+    vencimentoHoje: 0,
+    atrasadas: 0,
+    totalPagas: 0,
+  });
+  const [encomendaSearch, setEncomendaSearch] = useState("");
+  const [encomendaStatusFilter, setEncomendaStatusFilter] = useState("TODOS");
+  const [showNewEncomendaModal, setShowNewEncomendaModal] = useState(false);
+  const [selectedEncomenda, setSelectedEncomenda] = useState<Encomenda | null>(null);
+  const [viewCustomerHistory, setViewCustomerHistory] = useState<Customer | null>(null);
+  const [chargingEncomendaId, setChargingEncomendaId] = useState<string | null>(null);
+  const [savingEncomenda, setSavingEncomenda] = useState(false);
+  const [triggeringCron, setTriggeringCron] = useState(false);
 
   // Status de Expediente da Loja (Aberta / Fechada)
   const [isOpen, setIsOpen] = useState(true);
@@ -278,7 +305,253 @@ export default function AdminDashboardPage() {
     setSales(salesRes.data || []);
     setLoading(false);
     fetchZapStatus();
+    loadEncomendas();
   }
+
+  const loadEncomendas = async () => {
+    try {
+      setEncomendasLoading(true);
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const res = await fetch("/api/encomendas", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setEncomendas(data.encomendas || []);
+        if (data.kpis) setEncomendasKpis(data.kpis);
+      }
+    } catch (e) {
+      console.warn("Erro ao carregar encomendas:", e);
+    } finally {
+      setEncomendasLoading(false);
+    }
+  };
+
+  const handleCreateEncomenda = async (payload: {
+    customerId: string;
+    description: string;
+    quantity: number;
+    totalAmount: number;
+    deliveryDate?: string;
+    dueDate: string;
+    notes?: string;
+  }) => {
+    setSavingEncomenda(true);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const res = await fetch("/api/encomendas", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session.access_token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao cadastrar encomenda");
+
+      alert("✅ Encomenda cadastrada com sucesso e integrada ao financeiro do cliente!");
+      setShowNewEncomendaModal(false);
+      loadDashboard();
+      loadEncomendas();
+    } catch (e: any) {
+      alert(`Erro: ${e.message}`);
+    } finally {
+      setSavingEncomenda(false);
+    }
+  };
+
+  const handleBaixaEncomenda = async (enc: Encomenda) => {
+    if (
+      !confirm(
+        `Confirmar recebimento da encomenda "${enc.description}" no valor de ${formatBRL(
+          enc.total_amount
+        )} de ${enc.customer?.name}?\n\nO débito será quitado no financeiro e não haverá novas cobranças automáticas.`
+      )
+    )
+      return;
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const res = await fetch(`/api/encomendas/${enc.id}/baixa`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao registrar baixa");
+
+      alert("✅ Pagamento da encomenda registrado com sucesso!");
+      setSelectedEncomenda(null);
+      loadDashboard();
+      loadEncomendas();
+    } catch (e: any) {
+      alert(`Erro: ${e.message}`);
+    }
+  };
+
+  const handleCancelEncomenda = async (enc: Encomenda) => {
+    if (
+      !confirm(
+        `Tem certeza que deseja cancelar a encomenda "${enc.description}"?\n\nO valor de ${formatBRL(
+          enc.total_amount
+        )} será estornado do saldo do cliente e a cobrança automática será cancelada.`
+      )
+    )
+      return;
+
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const res = await fetch(`/api/encomendas/${enc.id}/cancelar`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao cancelar encomenda");
+
+      alert("Encomenda cancelada com sucesso. O saldo foi estornado.");
+      setSelectedEncomenda(null);
+      loadDashboard();
+      loadEncomendas();
+    } catch (e: any) {
+      alert(`Erro: ${e.message}`);
+    }
+  };
+
+  const handleEditEncomenda = async (
+    id: string,
+    payload: {
+      description: string;
+      quantity: number;
+      totalAmount: number;
+      deliveryDate?: string;
+      dueDate: string;
+      notes?: string;
+    }
+  ) => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+    if (!session) return;
+
+    const res = await fetch(`/api/encomendas/${id}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify(payload),
+    });
+
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || "Erro ao editar encomenda");
+
+    alert("✅ Encomenda atualizada com sucesso!");
+    if (data.encomenda) setSelectedEncomenda(data.encomenda);
+    loadDashboard();
+    loadEncomendas();
+  };
+
+  const handleChargeEncomenda = async (enc: Encomenda) => {
+    setChargingEncomendaId(enc.id);
+    try {
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const res = await fetch(`/api/encomendas/${enc.id}/cobrar`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        if (
+          confirm(
+            `Não foi possível enviar diretamente pelo robô WhatsApp (${
+              data.error || "serviço indisponível"
+            }).\n\nDeseja abrir a mensagem pronta no seu WhatsApp Web para enviar manualmente?`
+          )
+        ) {
+          handleOpenEncomendaWhatsAppWeb(enc);
+        }
+        return;
+      }
+
+      alert(`✅ Cobrança da encomenda enviada com sucesso no WhatsApp de ${enc.customer?.name}!`);
+      loadEncomendas();
+    } catch {
+      alert("Não foi possível conectar ao servidor de envio do WhatsApp.");
+    } finally {
+      setChargingEncomendaId(null);
+    }
+  };
+
+  const handleOpenEncomendaWhatsAppWeb = (enc: Encomenda) => {
+    if (!enc.customer?.phone) {
+      alert("Cliente não possui telefone cadastrado.");
+      return;
+    }
+    const cleanPhone = enc.customer.phone.replace(/\D/g, "");
+    const formattedPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
+
+    const { messageText } = buildEncomendaWhatsAppMessage({
+      customerName: enc.customer.name,
+      description: enc.description,
+      quantity: enc.quantity,
+      amount: enc.total_amount,
+      dueDate: enc.due_date,
+      storeName: store?.name || "MEU FIADIM",
+      pixKey: store?.pix_key,
+      pixCity: store?.pix_city,
+    });
+
+    const url = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(messageText)}`;
+    window.open(url, "_blank");
+  };
+
+  const handleTriggerCron = async () => {
+    setTriggeringCron(true);
+    try {
+      const res = await fetch("/api/encomendas/cron", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao executar agendador");
+
+      const rep = data.report || {};
+      alert(
+        `🤖 Varredura de Cobranças Automáticas Concluída!\n\n` +
+          `📅 Data de Referência: ${rep.date}\n` +
+          `🔍 Encomendas Verificadas: ${rep.scanned || 0}\n` +
+          `🚀 Disparos Enviados com Sucesso: ${rep.sent || 0}\n` +
+          `⏭️ Já Cobradas ou Sem Saldo (Ignoradas): ${rep.skipped || 0}\n` +
+          `❌ Falhas: ${rep.failed || 0}`
+      );
+      loadEncomendas();
+    } catch (e: any) {
+      alert(`Erro: ${e.message}`);
+    } finally {
+      setTriggeringCron(false);
+    }
+  };
 
   const fetchZapStatus = async () => {
     try {
@@ -1080,10 +1353,10 @@ export default function AdminDashboardPage() {
                       </div>
 
                       {/* Botões de Ação com Microinterações */}
-                      <div className="grid grid-cols-3 gap-2 sm:gap-2.5 pt-1">
+                      <div className="grid grid-cols-4 gap-1.5 sm:gap-2 pt-1">
                         <button
                           onClick={() => setTxModal({ customer: c, type: "compra" })}
-                          className="py-2.5 px-2.5 bg-rose-50 hover:bg-rose-100/80 text-rose-700 border border-rose-200/60 rounded-2xl text-xs font-extrabold flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-150 shadow-xs"
+                          className="py-2.5 px-2 bg-rose-50 hover:bg-rose-100/80 text-rose-700 border border-rose-200/60 rounded-2xl text-[11px] sm:text-xs font-extrabold flex items-center justify-center gap-1 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-150 shadow-xs"
                         >
                           <ArrowUpRight className="w-3.5 h-3.5 stroke-[2.2]" />
                           <span>Anotar</span>
@@ -1092,7 +1365,7 @@ export default function AdminDashboardPage() {
                           onClick={() =>
                             setTxModal({ customer: c, type: "pagamento" })
                           }
-                          className="py-2.5 px-2.5 bg-emerald-50 hover:bg-emerald-100/80 text-emerald-700 border border-emerald-200/60 rounded-2xl text-xs font-extrabold flex items-center justify-center gap-1.5 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-150 shadow-xs"
+                          className="py-2.5 px-2 bg-emerald-50 hover:bg-emerald-100/80 text-emerald-700 border border-emerald-200/60 rounded-2xl text-[11px] sm:text-xs font-extrabold flex items-center justify-center gap-1 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-150 shadow-xs"
                         >
                           <ArrowDownLeft className="w-3.5 h-3.5 stroke-[2.2]" />
                           <span>Receber</span>
@@ -1100,10 +1373,18 @@ export default function AdminDashboardPage() {
                         <button
                           onClick={() => setChargeModal(c)}
                           disabled={c.balance <= 0}
-                          className="py-2.5 px-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 disabled:from-slate-200 disabled:to-slate-200 disabled:text-slate-400 text-white rounded-2xl text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/25 hover:shadow-emerald-600/40 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-150 disabled:shadow-none disabled:pointer-events-none"
+                          className="py-2.5 px-2 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 disabled:from-slate-200 disabled:to-slate-200 disabled:text-slate-400 text-white rounded-2xl text-[11px] sm:text-xs font-extrabold flex items-center justify-center gap-1 shadow-md shadow-emerald-600/25 hover:shadow-emerald-600/40 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-150 disabled:shadow-none disabled:pointer-events-none"
                         >
                           <MessageCircle className="w-3.5 h-3.5 stroke-[2]" />
                           <span>Cobrar</span>
+                        </button>
+                        <button
+                          onClick={() => setViewCustomerHistory(c)}
+                          className="py-2.5 px-2 bg-slate-100 hover:bg-slate-200/80 text-slate-700 border border-slate-200/70 rounded-2xl text-[11px] sm:text-xs font-extrabold flex items-center justify-center gap-1 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-150 shadow-xs"
+                          title="Ver Extrato e Encomendas deste cliente"
+                        >
+                          <History className="w-3.5 h-3.5" />
+                          <span>Extrato</span>
                         </button>
                       </div>
                     </div>
@@ -1112,6 +1393,25 @@ export default function AdminDashboardPage() {
               </div>
             )}
           </>
+        )}
+
+        {tab === "encomendas" && (
+          <EncomendasTab
+            encomendas={encomendas}
+            kpis={encomendasKpis}
+            loading={encomendasLoading}
+            search={encomendaSearch}
+            setSearch={setEncomendaSearch}
+            statusFilter={encomendaStatusFilter}
+            setStatusFilter={setEncomendaStatusFilter}
+            onOpenNew={() => setShowNewEncomendaModal(true)}
+            onSelectEncomenda={(enc) => setSelectedEncomenda(enc)}
+            onBaixa={handleBaixaEncomenda}
+            onCharge={handleChargeEncomenda}
+            chargingId={chargingEncomendaId}
+            onTriggerCron={handleTriggerCron}
+            triggeringCron={triggeringCron}
+          />
         )}
 
         {tab === "produtos" && (
@@ -1894,9 +2194,9 @@ export default function AdminDashboardPage() {
         )}
       </main>
 
-      {/* Floating Bottom Island Dock com 5 Abas */}
-      <nav className="fixed bottom-4 inset-x-4 z-40 max-w-lg mx-auto bg-white/95 backdrop-blur-xl border border-slate-200/80 rounded-[28px] p-2 shadow-2xl shadow-slate-900/10 ring-1 ring-black/5">
-        <div className="grid grid-cols-5 gap-1">
+      {/* Floating Bottom Island Dock com 6 Abas */}
+      <nav className="fixed bottom-4 inset-x-3 z-40 max-w-xl mx-auto bg-white/95 backdrop-blur-xl border border-slate-200/80 rounded-[28px] p-1.5 sm:p-2 shadow-2xl shadow-slate-900/10 ring-1 ring-black/5">
+        <div className="grid grid-cols-6 gap-0.5 sm:gap-1">
           <button
             onClick={() => setTab("fiado")}
             className={`py-2 px-1 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
@@ -1905,8 +2205,20 @@ export default function AdminDashboardPage() {
                 : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
             }`}
           >
-            <Users className="w-5 h-5 stroke-[2]" />
-            <span className="text-[10px] sm:text-[11px]">Fiado</span>
+            <Users className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2]" />
+            <span className="text-[9px] sm:text-[11px] truncate">Fiado</span>
+          </button>
+
+          <button
+            onClick={() => setTab("encomendas")}
+            className={`py-2 px-1 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+              tab === "encomendas"
+                ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
+                : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
+            }`}
+          >
+            <CalendarClock className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2]" />
+            <span className="text-[9px] sm:text-[11px] truncate">Encomendas</span>
           </button>
 
           <button
@@ -1917,8 +2229,8 @@ export default function AdminDashboardPage() {
                 : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
             }`}
           >
-            <Package className="w-5 h-5 stroke-[2]" />
-            <span className="text-[10px] sm:text-[11px]">Produtos</span>
+            <Package className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2]" />
+            <span className="text-[9px] sm:text-[11px] truncate">Produtos</span>
           </button>
 
           <button
@@ -1929,8 +2241,8 @@ export default function AdminDashboardPage() {
                 : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
             }`}
           >
-            <Bike className="w-5 h-5 stroke-[2]" />
-            <span className="text-[10px] sm:text-[11px]">Frete</span>
+            <Bike className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2]" />
+            <span className="text-[9px] sm:text-[11px] truncate">Frete</span>
           </button>
 
           <button
@@ -1945,14 +2257,14 @@ export default function AdminDashboardPage() {
             }`}
           >
             <div className="relative">
-              <MessageCircle className="w-5 h-5 stroke-[2]" />
+              <MessageCircle className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2]" />
               <span
                 className={`absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full ring-2 ring-white ${
                   zapConnected ? "bg-emerald-500 animate-pulse" : "bg-amber-400"
                 }`}
               />
             </div>
-            <span className="text-[10px] sm:text-[11px] truncate">WhatsApp</span>
+            <span className="text-[9px] sm:text-[11px] truncate">WhatsApp</span>
           </button>
 
           <button
@@ -1963,8 +2275,8 @@ export default function AdminDashboardPage() {
                 : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
             }`}
           >
-            <Receipt className="w-5 h-5 stroke-[2]" />
-            <span className="text-[10px] sm:text-[11px]">Fatura</span>
+            <Receipt className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2]" />
+            <span className="text-[9px] sm:text-[11px] truncate">Fatura</span>
           </button>
         </div>
       </nav>
@@ -2605,6 +2917,43 @@ export default function AdminDashboardPage() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Modais do Módulo de Encomendas */}
+      {showNewEncomendaModal && (
+        <NewEncomendaModal
+          isOpen={showNewEncomendaModal}
+          onClose={() => setShowNewEncomendaModal(false)}
+          customers={customers}
+          onSave={handleCreateEncomenda}
+          saving={savingEncomenda}
+        />
+      )}
+
+      {selectedEncomenda && (
+        <EncomendaDetailsModal
+          encomenda={selectedEncomenda}
+          onClose={() => setSelectedEncomenda(null)}
+          onBaixa={handleBaixaEncomenda}
+          onCancel={handleCancelEncomenda}
+          onEdit={handleEditEncomenda}
+          onCharge={handleChargeEncomenda}
+          charging={chargingEncomendaId === selectedEncomenda.id}
+          onOpenWhatsAppWeb={handleOpenEncomendaWhatsAppWeb}
+        />
+      )}
+
+      {viewCustomerHistory && (
+        <CustomerHistoryModal
+          customer={viewCustomerHistory}
+          encomendas={encomendas}
+          sales={sales}
+          onClose={() => setViewCustomerHistory(null)}
+          onSelectEncomenda={(enc) => {
+            setViewCustomerHistory(null);
+            setSelectedEncomenda(enc);
+          }}
+        />
       )}
     </div>
   );
