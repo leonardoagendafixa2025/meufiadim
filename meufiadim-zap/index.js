@@ -27,6 +27,17 @@ process.on("unhandledRejection", (reason) => {
 const app = express();
 app.use(express.json());
 
+// Habilita CORS completo para chamadas diretas do painel SuperAdmin
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE");
+  res.header("Access-Control-Allow-Headers", "Content-Type, Authorization, x-api-key");
+  if (req.method === "OPTIONS") {
+    return res.sendStatus(200);
+  }
+  next();
+});
+
 const MAIN_PORT = parseInt(process.env.PORT || "8080", 10);
 const API_KEY = process.env.API_KEY || "minha-chave-secreta-meufiadim";
 

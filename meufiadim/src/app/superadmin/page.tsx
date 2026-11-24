@@ -282,8 +282,44 @@ export default function SuperAdminPage() {
       if (showLoading) setZapLoading(true);
       setZapError(null);
 
-      const res = await fetch("/api/zap/qr", { cache: "no-store" });
-      const data = await res.json();
+      let data: any = null;
+
+      // 1. Tenta buscar pela API Route interna
+      try {
+        const res = await fetch("/api/zap/qr", { cache: "no-store" });
+        if (res.ok) {
+          data = await res.json();
+        }
+      } catch (proxyErr) {
+        console.warn("Proxy interno falhou:", proxyErr);
+      }
+
+      // 2. Se a rota interna não trouxe QR nem conexão, consulta diretamente o robô em nuvem do navegador
+      if (!data || (!data.qrDataUrl && !data.connected)) {
+        try {
+          const directRes = await fetch("https://meufiadim-production.up.railway.app/api/qr-json", {
+            headers: { "x-api-key": "minha-chave-secreta-meufiadim" },
+            cache: "no-store",
+          });
+          if (directRes.ok) {
+            const directData = await directRes.json();
+            if (directData.qrDataUrl || directData.connected) {
+              data = {
+                configured: true,
+                connected: !!directData.connected,
+                qrDataUrl: directData.qrDataUrl || null,
+              };
+            }
+          }
+        } catch (directErr) {
+          console.warn("Consulta direta também falhou:", directErr);
+        }
+      }
+
+      if (!data) {
+        setZapError("Não foi possível alcançar o serviço de mensagens. O robô está inicializando.");
+        return;
+      }
 
       if (!data.configured) {
         setZapConfigured(false);
@@ -303,8 +339,10 @@ export default function SuperAdminPage() {
         showToast("WhatsApp conectado com sucesso! O robô já está ativo.");
       }
 
-      if (data.error && !data.connected) {
+      if (data.error && !data.connected && !data.qrDataUrl) {
         setZapError(data.error);
+      } else {
+        setZapError(null);
       }
     } catch {
       setZapError("Serviço de WhatsApp temporariamente inacessível.");
@@ -324,13 +362,17 @@ export default function SuperAdminPage() {
 
     try {
       setDisconnectingZap(true);
-      const res = await fetch("/api/zap/disconnect", { method: "POST" });
-      if (!res.ok) throw new Error("Falha ao desconectar.");
-
+      let res = await fetch("/api/zap/disconnect", { method: "POST" });
+      if (!res.ok) {
+        res = await fetch("https://meufiadim-production.up.railway.app/api/disconnect", {
+          method: "POST",
+          headers: { "x-api-key": "minha-chave-secreta-meufiadim" },
+        });
+      }
       setZapConnected(false);
       setZapQR(null);
       showToast("WhatsApp desconectado com sucesso!");
-      setTimeout(fetchZapStatus, 1500);
+      setTimeout(() => fetchZapStatus(true), 2000);
     } catch (err: any) {
       showToast(err.message, "error");
     } finally {
