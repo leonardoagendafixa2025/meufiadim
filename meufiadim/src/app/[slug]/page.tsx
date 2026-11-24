@@ -36,6 +36,8 @@ import {
   Check,
   AlertCircle,
   Truck,
+  Lock,
+  Loader2,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { formatBRL } from "@/lib/whatsapp";
@@ -46,6 +48,12 @@ import {
   calculateDeliveryFee,
   type FreightCalculationResult,
 } from "@/lib/viacep";
+import {
+  StoreCustomerAuthModal,
+  type CustomerUser,
+} from "@/components/store/StoreCustomerAuthModal";
+import { StoreCustomerOrdersModal } from "@/components/store/StoreCustomerOrdersModal";
+import { formatPhoneBR } from "@/lib/customer-auth";
 
 interface Store {
   id: string;
@@ -157,6 +165,14 @@ export default function TenantStorePage() {
   const [paymentMethod, setPaymentMethod] = useState("Fiado");
   const [notes, setNotes] = useState("");
   const [calculatedFreight, setCalculatedFreight] = useState<number>(5.0);
+
+  // Autenticação do Cliente & Histórico de Compras na Vitrine
+  const [customerUser, setCustomerUser] = useState<CustomerUser | null>(null);
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [authModalMode, setAuthModalMode] = useState<"login" | "register">("login");
+  const [authPromptMessage, setAuthPromptMessage] = useState<string | undefined>(undefined);
+  const [showOrdersModal, setShowOrdersModal] = useState(false);
+  const [submittingOrder, setSubmittingOrder] = useState(false);
 
   // Modal de Detalhes do Produto
   const [selectedProductDetails, setSelectedProductDetails] = useState<Product | null>(null);
@@ -308,6 +324,49 @@ export default function TenantStorePage() {
     loadStore();
   }, [slug]);
 
+  // Restaurar e sincronizar sessão do cliente para esta loja
+  useEffect(() => {
+    if (!store?.id) return;
+    try {
+      const saved = localStorage.getItem(`meufiadim_customer_${store.id}`);
+      if (saved) {
+        const parsed = JSON.parse(saved) as CustomerUser;
+        if (parsed && parsed.id) {
+          setCustomerUser(parsed);
+          setCustomerName(parsed.name || "");
+          setCustomerPhone(parsed.phone || "");
+
+          // Validar e atualizar saldo/dados em background
+          fetch("/api/store/customer/auth", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              action: "session",
+              storeId: store.id,
+              customerId: parsed.id,
+              phone: parsed.phone,
+            }),
+          })
+            .then((res) => res.json())
+            .then((data) => {
+              if (data.success && data.customer) {
+                setCustomerUser(data.customer);
+                try {
+                  localStorage.setItem(
+                    `meufiadim_customer_${store.id}`,
+                    JSON.stringify(data.customer)
+                  );
+                } catch {}
+              }
+            })
+            .catch(() => {});
+        }
+      }
+    } catch (e) {
+      console.error("Erro ao carregar sessão local do cliente:", e);
+    }
+  }, [store?.id]);
+
   // Lista de categorias únicas derivadas dos produtos e categorias configuradas
   const categories = useMemo(() => {
     const fromProds = products.map((p) => p.category?.trim() || "Geral");
@@ -416,16 +475,28 @@ export default function TenantStorePage() {
     }
   };
 
-  // Enviar pedido no WhatsApp
-  const handleWhatsAppCheckout = () => {
+  // Enviar pedido no WhatsApp com gravação no banco e verificação obrigatória de login
+  const handleWhatsAppCheckout = async () => {
     if (!isOpen) {
       alert("Esta loja está fechada no momento e não está aceitando novos pedidos.");
       return;
     }
-    if (!customerName.trim()) {
-      alert("Por favor, informe seu nome completo para o pedido.");
+
+    // REGRA FUNDAMENTAL: SÓ CONSEGUE COMPRAR SE ESTIVER LOGADO!
+    if (!customerUser) {
+      setAuthPromptMessage(
+        "Para finalizar o seu pedido e acompanhar suas compras, entre com seu celular e senha ou crie sua conta em 10 segundos!"
+      );
+      setAuthModalMode("login");
+      setShowAuthModal(true);
       return;
     }
+
+    if (cart.length === 0) {
+      alert("Sua sacola está vazia!");
+      return;
+    }
+
     if (deliveryType === "entrega") {
       if (freightError) {
         alert(
@@ -443,6 +514,8 @@ export default function TenantStorePage() {
       return;
     }
 
+    setSubmittingOrder(true);
+
     const itemsText = cart
       .map(
         (i) =>
@@ -455,37 +528,84 @@ export default function TenantStorePage() {
         ? "🏬 Retirada no balcão da loja"
         : `📍 Entrega: ${addressStreet || "Endereço"} ${addressNumber ? "nº " + addressNumber : ""} ${addressComp ? "(" + addressComp + ")" : ""} - Bairro: ${selectedNeighborhood || "Informado"} ${cepInput ? "(CEP " + cepInput + ")" : ""}`;
 
-    const lines = [
-      `🛍️ *NOVO PEDIDO — ${store?.name || "Cardápio"}*`,
-      ``,
-      `👤 *Cliente:* ${customerName.trim()}`,
-      `🛵 *Modalidade:* ${deliveryType === "retirada" ? "RETIRADA NA LOJA" : "ENTREGA EM DOMICÍLIO"}`,
-      destinationAddress,
-      `💳 *Forma de Pagamento:* ${paymentMethod}`,
-      ``,
-      `📋 *ITENS:*`,
-      itemsText,
-      ``,
-      `Subtotal: ${formatBRL(subtotalPrice)}`,
-      deliveryType === "entrega" ? `Taxa de Entrega: ${formatBRL(deliveryCost)}` : `Frete: Grátis (Retirada)`,
-      `💰 *VALOR TOTAL: ${formatBRL(finalTotalPrice)}*`,
-    ];
+    try {
+      // 1. Gravar venda no banco de dados vinculada ao cliente autenticado
+      const res = await fetch("/api/store/customer/orders", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          storeId: store?.id,
+          customerId: customerUser.id,
+          totalAmount: finalTotalPrice,
+          paymentMethod,
+          deliveryType,
+          freightFee: deliveryCost,
+          address: destinationAddress,
+          notes: notes.trim(),
+          description: cart.map((i) => `${i.qty}x ${i.product.name}`).join(" • "),
+          items: cart.map((i) => ({
+            id: i.product.id,
+            name: i.product.name,
+            price: i.product.price,
+            qty: i.qty,
+          })),
+        }),
+      });
 
-    if (notes.trim()) {
-      lines.push(``, `📝 *Observações:* ${notes.trim()}`);
+      const orderData = await res.json();
+      if (!res.ok) {
+        throw new Error(orderData.error || "Não foi possível registrar o pedido no sistema.");
+      }
+
+      // Se pagou no Fiado, atualiza o saldo localmente do cliente
+      if (paymentMethod === "Fiado") {
+        setCustomerUser((prev) =>
+          prev
+            ? {
+                ...prev,
+                balance: Number(((prev.balance || 0) + finalTotalPrice).toFixed(2)),
+              }
+            : null
+        );
+      }
+
+      // 2. Gerar mensagem para o WhatsApp com identificação do cliente
+      const lines = [
+        `🛍️ *NOVO PEDIDO — ${store?.name || "Cardápio"}*`,
+        ``,
+        `👤 *Cliente:* ${customerUser.name} (${formatPhoneBR(customerUser.phone)})`,
+        `🛵 *Modalidade:* ${deliveryType === "retirada" ? "RETIRADA NA LOJA" : "ENTREGA EM DOMICÍLIO"}`,
+        destinationAddress,
+        `💳 *Forma de Pagamento:* ${paymentMethod}`,
+        ``,
+        `📋 *ITENS:*`,
+        itemsText,
+        ``,
+        `Subtotal: ${formatBRL(subtotalPrice)}`,
+        deliveryType === "entrega" ? `Taxa de Entrega: ${formatBRL(deliveryCost)}` : `Frete: Grátis (Retirada)`,
+        `💰 *VALOR TOTAL: ${formatBRL(finalTotalPrice)}*`,
+      ];
+
+      if (notes.trim()) {
+        lines.push(``, `📝 *Observações:* ${notes.trim()}`);
+      }
+
+      const phone = (store?.whatsapp || "").replace(/\D/g, "");
+      const formattedPhone = phone.startsWith("55") ? phone : `55${phone}`;
+
+      window.open(
+        `https://wa.me/${formattedPhone}?text=${encodeURIComponent(lines.join("\n"))}`,
+        "_blank"
+      );
+
+      setCart([]);
+      setCartOpen(false);
+      showToast("Pedido gerado e salvo com sucesso! Redirecionando para o WhatsApp...");
+    } catch (err: any) {
+      alert("Atenção: " + (err.message || "Não foi possível salvar seu pedido. Tente novamente."));
+    } finally {
+      setSubmittingOrder(false);
     }
-
-    const phone = (store?.whatsapp || "").replace(/\D/g, "");
-    const formattedPhone = phone.startsWith("55") ? phone : `55${phone}`;
-
-    window.open(
-      `https://wa.me/${formattedPhone}?text=${encodeURIComponent(lines.join("\n"))}`,
-      "_blank"
-    );
-
-    setCart([]);
-    setCartOpen(false);
-    showToast("Pedido gerado com sucesso! Redirecionando para o WhatsApp...");
   };
 
   if (loading) {
@@ -568,22 +688,39 @@ export default function TenantStorePage() {
               )}
             </button>
 
-            {/* Botão de Perfil / Conta */}
-            <button
-              onClick={() => setCartOpen(true)}
-              aria-label="Minha Conta e Pedidos"
-              className="w-10 h-10 rounded-full bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition-all relative"
-            >
-              <User className="w-4 h-4 stroke-[2]" />
-              {totalItems > 0 && (
-                <span
-                  style={{ backgroundColor: brandColor }}
-                  className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-white text-[9px] font-black flex items-center justify-center shadow-xs"
+            {/* Botão de Perfil / Minha Conta & Histórico de Compras */}
+            {customerUser ? (
+              <button
+                onClick={() => setShowOrdersModal(true)}
+                aria-label="Minha Conta e Histórico"
+                title={`Conectado como ${customerUser.name} - Ver Histórico`}
+                className="h-10 px-3 rounded-full bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex items-center gap-1.5 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition-all"
+              >
+                <div
+                  style={{ backgroundColor: `${brandColor}20`, color: brandColor }}
+                  className="w-6 h-6 rounded-full flex items-center justify-center text-[11px] font-black shrink-0"
                 >
-                  {totalItems}
+                  {customerUser.name.slice(0, 1).toUpperCase()}
+                </div>
+                <span className="max-w-[70px] sm:max-w-[110px] truncate text-slate-900 dark:text-white font-extrabold">
+                  {customerUser.name.split(" ")[0]}
                 </span>
-              )}
-            </button>
+              </button>
+            ) : (
+              <button
+                onClick={() => {
+                  setAuthPromptMessage(undefined);
+                  setAuthModalMode("login");
+                  setShowAuthModal(true);
+                }}
+                aria-label="Entrar ou Cadastrar"
+                title="Entrar ou Criar Conta"
+                className="h-10 px-3.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex items-center gap-1.5 text-xs font-black text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition-all"
+              >
+                <User className="w-4 h-4 stroke-[2.2]" />
+                <span className="hidden sm:inline">Entrar</span>
+              </button>
+            )}
           </div>
         </div>
       </header>
@@ -1281,18 +1418,67 @@ export default function TenantStorePage() {
                 </div>
               </div>
 
-              {/* Dados do Cliente */}
-              <div className="space-y-1.5">
+              {/* Identificação do Cliente (Login Obrigatório) */}
+              <div className="space-y-2">
                 <label className="text-xs font-black uppercase tracking-wider text-slate-400">
-                  Seus dados
+                  Identificação do Cliente
                 </label>
-                <input
-                  type="text"
-                  placeholder="Seu nome completo *"
-                  value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 shadow-xs focus:bg-white dark:focus:bg-slate-800 focus:border-emerald-500 focus:outline-none transition-all"
-                />
+                {customerUser ? (
+                  <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200/80 dark:border-emerald-800/60 rounded-2xl flex items-center justify-between">
+                    <div className="flex items-center gap-2.5">
+                      <div
+                        style={{ backgroundColor: `${brandColor}20`, color: brandColor }}
+                        className="w-9 h-9 rounded-xl flex items-center justify-center font-black text-xs"
+                      >
+                        {customerUser.name.slice(0, 1).toUpperCase()}
+                      </div>
+                      <div>
+                        <p className="text-xs font-black text-slate-900 dark:text-white leading-tight">
+                          {customerUser.name}
+                        </p>
+                        <p className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                          {formatPhoneBR(customerUser.phone)}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthPromptMessage(undefined);
+                        setAuthModalMode("login");
+                        setShowAuthModal(true);
+                      }}
+                      className="text-[11px] font-bold text-slate-500 hover:text-slate-800 dark:hover:text-slate-200 underline"
+                    >
+                      Trocar conta
+                    </button>
+                  </div>
+                ) : (
+                  <div className="p-4 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/40 dark:to-orange-950/40 border-2 border-amber-200/80 dark:border-amber-800/60 rounded-2xl space-y-2.5">
+                    <div className="flex items-center gap-2 text-amber-800 dark:text-amber-200 font-black text-xs uppercase tracking-wide">
+                      <Lock className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                      <span>Login Obrigatório para Comprar</span>
+                    </div>
+                    <p className="text-xs text-amber-900 dark:text-amber-300 leading-snug font-medium">
+                      Para finalizar seu pedido e acompanhar suas compras, você precisa entrar ou se cadastrar com seu celular e senha.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAuthPromptMessage(
+                          "Para finalizar seu pedido, entre com seu celular e senha ou crie sua conta em 10 segundos!"
+                        );
+                        setAuthModalMode("login");
+                        setShowAuthModal(true);
+                      }}
+                      style={{ backgroundColor: brandColor }}
+                      className="w-full py-2.5 px-3 rounded-xl text-white font-black text-xs flex items-center justify-center gap-1.5 shadow-sm active:scale-95 transition"
+                    >
+                      <User className="w-3.5 h-3.5" />
+                      <span>Entrar ou Cadastrar Agora</span>
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* Endereço de Entrega (se for Entrega) */}
@@ -1499,24 +1685,94 @@ export default function TenantStorePage() {
             </div>
 
             <div className="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-lg">
-              <button
-                onClick={handleWhatsAppCheckout}
-                disabled={!isOpen || cart.length === 0}
-                style={{ backgroundColor: isOpen ? brandColor : "#94A3B8" }}
-                className={`w-full hover:opacity-95 hover:shadow-xl active:scale-[0.98] text-white py-4 px-4 rounded-2xl font-black text-sm sm:text-base shadow-lg shadow-black/15 flex items-center justify-center gap-2.5 transition-all duration-150 ${
-                  !isOpen || cart.length === 0 ? "cursor-not-allowed opacity-60 shadow-none" : ""
-                }`}
-              >
-                <MessageCircle className="w-5 h-5 stroke-[2]" />
-                <span>
-                  {isOpen
-                    ? `Enviar pedido no Zap • ${formatBRL(finalTotalPrice)}`
-                    : "Loja Fechada no Momento"}
-                </span>
-              </button>
+              {customerUser ? (
+                <button
+                  onClick={handleWhatsAppCheckout}
+                  disabled={!isOpen || cart.length === 0 || submittingOrder}
+                  style={{ backgroundColor: isOpen ? brandColor : "#94A3B8" }}
+                  className={`w-full hover:opacity-95 hover:shadow-xl active:scale-[0.98] text-white py-4 px-4 rounded-2xl font-black text-sm sm:text-base shadow-lg shadow-black/15 flex items-center justify-center gap-2.5 transition-all duration-150 ${
+                    !isOpen || cart.length === 0 || submittingOrder ? "cursor-not-allowed opacity-60 shadow-none" : ""
+                  }`}
+                >
+                  {submittingOrder ? (
+                    <>
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                      <span>Registrando Pedido...</span>
+                    </>
+                  ) : (
+                    <>
+                      <MessageCircle className="w-5 h-5 stroke-[2]" />
+                      <span>
+                        {isOpen
+                          ? `Enviar pedido no Zap • ${formatBRL(finalTotalPrice)}`
+                          : "Loja Fechada no Momento"}
+                      </span>
+                    </>
+                  )}
+                </button>
+              ) : (
+                <button
+                  onClick={() => {
+                    setAuthPromptMessage(
+                      "Para finalizar seu pedido, entre com seu celular e senha ou crie sua conta em 10 segundos!"
+                    );
+                    setAuthModalMode("login");
+                    setShowAuthModal(true);
+                  }}
+                  style={{ backgroundColor: brandColor }}
+                  className="w-full hover:opacity-95 hover:shadow-xl active:scale-[0.98] text-white py-4 px-4 rounded-2xl font-black text-sm sm:text-base shadow-lg shadow-black/15 flex items-center justify-center gap-2.5 transition-all duration-150"
+                >
+                  <Lock className="w-5 h-5 stroke-[2]" />
+                  <span>Entrar / Cadastrar para Pedir • {formatBRL(finalTotalPrice)}</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
+      )}
+
+      {/* MODAL DE LOGIN / CADASTRO DE CLIENTE */}
+      {showAuthModal && store && (
+        <StoreCustomerAuthModal
+          isOpen={showAuthModal}
+          onClose={() => setShowAuthModal(false)}
+          storeId={store.id}
+          storeName={store.name}
+          brandColor={brandColor}
+          initialMode={authModalMode}
+          promptMessage={authPromptMessage}
+          onSuccess={(cust) => {
+            setCustomerUser(cust);
+            setCustomerName(cust.name);
+            setCustomerPhone(cust.phone);
+            showToast(`Olá, ${cust.name.split(" ")[0]}! Você está conectado.`);
+          }}
+        />
+      )}
+
+      {/* MODAL DE HISTÓRICO DE COMPRAS DO CLIENTE */}
+      {showOrdersModal && customerUser && store && (
+        <StoreCustomerOrdersModal
+          isOpen={showOrdersModal}
+          onClose={() => setShowOrdersModal(false)}
+          customer={customerUser}
+          storeId={store.id}
+          storeName={store.name}
+          brandColor={brandColor}
+          onLogout={() => {
+            try {
+              localStorage.removeItem(`meufiadim_customer_${store.id}`);
+            } catch {}
+            setCustomerUser(null);
+            setShowOrdersModal(false);
+            showToast("Você saiu da sua conta com sucesso.");
+          }}
+          onNewOrderClick={() => {
+            setShowOrdersModal(false);
+            const el = document.getElementById("search-input");
+            if (el) el.focus();
+          }}
+        />
       )}
 
       {/* RODAPÉ */}

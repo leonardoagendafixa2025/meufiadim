@@ -35,12 +35,13 @@ CREATE TABLE IF NOT EXISTS public.products (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. Tabela: Clientes do Fiado
+-- 3. Tabela: Clientes do Fiado & Vitrine
 CREATE TABLE IF NOT EXISTS public.customers (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   store_id UUID NOT NULL REFERENCES public.stores(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   phone TEXT NOT NULL,
+  password_hash TEXT,
   credit_limit NUMERIC(10,2) DEFAULT 0.00,
   balance NUMERIC(10,2) DEFAULT 0.00,
   due_date DATE,
@@ -72,6 +73,8 @@ CREATE TABLE IF NOT EXISTS public.sales (
   total_amount NUMERIC(10,2) NOT NULL DEFAULT 0.00,
   commission_amount NUMERIC(10,2) NOT NULL DEFAULT 0.00,
   payment_method TEXT NOT NULL,
+  description TEXT,
+  items JSONB,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
