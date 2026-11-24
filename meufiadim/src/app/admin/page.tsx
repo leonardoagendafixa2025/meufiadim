@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -130,9 +130,10 @@ export default function AdminDashboardPage() {
   const [pName, setPName] = useState("");
   const [pDesc, setPDesc] = useState("");
   const [pPrice, setPPrice] = useState("");
-  const [pCat, setPCat] = useState("Geral");
-  const [pStock, setPStock] = useState("10");
+  const [pCat, setPCat] = useState("");
+  const [pStock, setPStock] = useState("");
   const [pImg, setPImg] = useState("");
+  const [selectedProductCategory, setSelectedProductCategory] = useState("Todos");
 
   // Pix do lojista
   const [pixKey, setPixKey] = useState("");
@@ -451,6 +452,30 @@ export default function AdminDashboardPage() {
     window.open(url, "_blank");
   };
 
+  const existingCategories = useMemo(() => {
+    const list = products
+      .map((p) => p.category?.trim())
+      .filter((c): c is string => Boolean(c && c !== "Todos"));
+    return Array.from(new Set(list));
+  }, [products]);
+
+  const filteredProducts = useMemo(() => {
+    if (selectedProductCategory === "Todos") return products;
+    return products.filter(
+      (p) => (p.category || "Geral").toLowerCase() === selectedProductCategory.toLowerCase()
+    );
+  }, [products, selectedProductCategory]);
+
+  function openNewProductModal() {
+    setPName("");
+    setPDesc("");
+    setPPrice("");
+    setPCat("");
+    setPStock("");
+    setPImg("");
+    setShowNewProduct(true);
+  }
+
   const handleAddProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!store || !pName.trim() || !pPrice) return;
@@ -461,13 +486,15 @@ export default function AdminDashboardPage() {
       description: pDesc.trim(),
       price: Number(pPrice.replace(",", ".")),
       category: pCat.trim() || "Geral",
-      stock: Number(pStock) || 0,
+      stock: pStock.trim() ? Number(pStock) : 0,
       image_url: pImg.trim() || null,
     });
 
     setPName("");
     setPDesc("");
     setPPrice("");
+    setPCat("");
+    setPStock("");
     setPImg("");
     setShowNewProduct(false);
     loadDashboard();
@@ -875,13 +902,51 @@ export default function AdminDashboardPage() {
                 </p>
               </div>
               <button
-                onClick={() => setShowNewProduct(true)}
+                onClick={openNewProductModal}
                 className="group inline-flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-extrabold text-xs shadow-md shadow-slate-900/20 hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-150"
               >
                 <Plus className="w-4 h-4 text-emerald-400 group-hover:rotate-90 transition-transform duration-200" />
                 <span>Novo Produto</span>
               </button>
             </div>
+
+            {/* Filtro de Categorias no Painel */}
+            {existingCategories.length > 0 && (
+              <div className="flex items-center gap-2 overflow-x-auto pb-1 [&::-webkit-scrollbar]:hidden">
+                <button
+                  type="button"
+                  onClick={() => setSelectedProductCategory("Todos")}
+                  className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition active:scale-95 ${
+                    selectedProductCategory === "Todos"
+                      ? "bg-slate-900 text-white shadow-xs"
+                      : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                  }`}
+                >
+                  Todas ({products.length})
+                </button>
+                {existingCategories.map((cat) => {
+                  const count = products.filter(
+                    (p) => (p.category || "Geral").toLowerCase() === cat.toLowerCase()
+                  ).length;
+                  const active =
+                    selectedProductCategory.toLowerCase() === cat.toLowerCase();
+                  return (
+                    <button
+                      key={cat}
+                      type="button"
+                      onClick={() => setSelectedProductCategory(cat)}
+                      className={`px-3.5 py-1.5 rounded-xl text-xs font-extrabold whitespace-nowrap transition active:scale-95 ${
+                        active
+                          ? "bg-slate-900 text-white shadow-xs"
+                          : "bg-white text-slate-600 border border-slate-200 hover:bg-slate-50"
+                      }`}
+                    >
+                      {cat} ({count})
+                    </button>
+                  );
+                })}
+              </div>
+            )}
 
             {products.length === 0 ? (
               <div className="bg-white rounded-[32px] p-10 sm:p-12 text-center border border-slate-200/70 shadow-sm shadow-slate-200/40">
@@ -895,15 +960,19 @@ export default function AdminDashboardPage() {
                   Cadastre seus produtos com foto e preço para receber pedidos no WhatsApp e fiado.
                 </p>
                 <button
-                  onClick={() => setShowNewProduct(true)}
+                  onClick={openNewProductModal}
                   className="mt-5 inline-flex items-center gap-2 px-5 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white font-extrabold text-xs shadow-md shadow-emerald-600/20 hover:-translate-y-0.5 active:scale-[0.98] transition-all"
                 >
                   <Plus className="w-4 h-4" /> Cadastrar primeiro produto
                 </button>
               </div>
+            ) : filteredProducts.length === 0 ? (
+              <div className="bg-white rounded-3xl p-8 text-center border border-slate-200/70 shadow-xs text-xs text-slate-500">
+                Nenhum produto cadastrado na categoria <strong>{selectedProductCategory}</strong>.
+              </div>
             ) : (
               <div className="space-y-3">
-                {products.map((p) => (
+                {filteredProducts.map((p) => (
                   <div
                     key={p.id}
                     className="group bg-white rounded-3xl p-4 border border-slate-200/70 shadow-sm shadow-slate-200/50 hover:shadow-md hover:border-slate-300 transition-all flex items-center justify-between gap-3.5"
@@ -1517,19 +1586,63 @@ export default function AdminDashboardPage() {
               />
               <input
                 type="number"
-                placeholder="Estoque"
+                placeholder="Estoque (opcional)"
                 value={pStock}
                 onChange={(e) => setPStock(e.target.value)}
                 className="w-full px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-sm font-semibold text-slate-900 placeholder:text-slate-400 shadow-xs focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none transition-all"
               />
             </div>
-            <input
-              type="text"
-              placeholder="Categoria (ex: Roupas, Doces)"
-              value={pCat}
-              onChange={(e) => setPCat(e.target.value)}
-              className="w-full px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-sm font-semibold text-slate-900 placeholder:text-slate-400 shadow-xs focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none transition-all"
-            />
+
+            {/* Campo de Categoria com Criação Dinâmica & Sugestões */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-700 block">
+                  Categoria do Produto
+                </label>
+                <span className="text-[10px] text-slate-400 font-medium">
+                  Crie uma nova ou escolha abaixo
+                </span>
+              </div>
+
+              <input
+                type="text"
+                placeholder="Digite para criar uma nova ou clique abaixo..."
+                value={pCat}
+                onChange={(e) => setPCat(e.target.value)}
+                className="w-full px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-sm font-semibold text-slate-900 placeholder:text-slate-400 shadow-xs focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none transition-all"
+              />
+
+              {/* Pílulas de Seleção Rápida */}
+              <div className="space-y-1 pt-0.5">
+                <span className="text-[10px] uppercase font-extrabold tracking-wider text-slate-400 block">
+                  {existingCategories.length > 0
+                    ? "Categorias da sua loja (clique para selecionar):"
+                    : "Sugestões de categorias (clique para usar):"}
+                </span>
+                <div className="flex flex-wrap gap-1.5">
+                  {(existingCategories.length > 0
+                    ? existingCategories
+                    : ["Lanches", "Bebidas", "Porções", "Doces", "Roupas", "Geral"]
+                  ).map((catName) => {
+                    const isSelected = pCat.toLowerCase() === catName.toLowerCase();
+                    return (
+                      <button
+                        key={catName}
+                        type="button"
+                        onClick={() => setPCat(catName)}
+                        className={`px-3 py-1 rounded-xl text-xs font-bold border transition-all active:scale-95 ${
+                          isSelected
+                            ? "bg-emerald-600 text-white border-emerald-600 shadow-xs"
+                            : "bg-slate-100 hover:bg-slate-200/80 text-slate-700 border-slate-200/60"
+                        }`}
+                      >
+                        {catName}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
             <div className="space-y-2">
               <label className="text-xs font-bold text-slate-700 block">
                 Foto do produto
