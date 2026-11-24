@@ -71,3 +71,52 @@ export async function PATCH(req: Request) {
     );
   }
 }
+
+export async function DELETE(req: Request) {
+  try {
+    const authHeader = req.headers.get("authorization");
+    if (!authHeader) {
+      return NextResponse.json({ error: "Não autorizado" }, { status: 401 });
+    }
+
+    const token = authHeader.replace("Bearer ", "");
+    const supabaseAdmin = getSupabaseAdmin();
+    const {
+      data: { user },
+      error: authError,
+    } = await supabaseAdmin.auth.getUser(token);
+
+    const userEmail = (user?.email || "").toLowerCase().trim();
+    const superAdmins = [
+      "toyesterdayagencia@gmail.com",
+      (process.env.NEXT_PUBLIC_SUPERADMIN_EMAIL || "").toLowerCase().trim(),
+    ].filter(Boolean);
+
+    if (authError || !user || !superAdmins.includes(userEmail)) {
+      return NextResponse.json(
+        { error: "Acesso negado. Apenas o SuperAdmin pode excluir lojas." },
+        { status: 403 }
+      );
+    }
+
+    const { storeId } = await req.json();
+    if (!storeId) {
+      return NextResponse.json(
+        { error: "storeId é obrigatório" },
+        { status: 400 }
+      );
+    }
+
+    const { error } = await supabaseAdmin.from("stores").delete().eq("id", storeId);
+    if (error) {
+      return NextResponse.json({ error: error.message }, { status: 400 });
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: err.message || "Erro interno" },
+      { status: 500 }
+    );
+  }
+}

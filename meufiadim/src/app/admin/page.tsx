@@ -103,7 +103,6 @@ export default function AdminDashboardPage() {
   const [zapConfigured, setZapConfigured] = useState(true);
   const [zapError, setZapError] = useState<string | null>(null);
   const [disconnectingZap, setDisconnectingZap] = useState(false);
-  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
 
   const [showNewCustomer, setShowNewCustomer] = useState(false);
   const [showNewProduct, setShowNewProduct] = useState(false);
@@ -159,6 +158,17 @@ export default function AdminDashboardPage() {
       return;
     }
 
+    const email = (user.email || "").toLowerCase().trim();
+    const superAdmins = [
+      "toyesterdayagencia@gmail.com",
+      (process.env.NEXT_PUBLIC_SUPERADMIN_EMAIL || "").toLowerCase().trim(),
+    ].filter(Boolean);
+
+    if (superAdmins.includes(email)) {
+      router.replace("/superadmin");
+      return;
+    }
+
     const { data: storeData } = await supabase
       .from("stores")
       .select("*")
@@ -171,12 +181,6 @@ export default function AdminDashboardPage() {
     }
 
     setStore(storeData);
-    const email = (user.email || "").toLowerCase().trim();
-    const superAdmins = [
-      "toyesterdayagencia@gmail.com",
-      (process.env.NEXT_PUBLIC_SUPERADMIN_EMAIL || "").toLowerCase().trim(),
-    ].filter(Boolean);
-    setIsSuperAdmin(superAdmins.includes(email));
     setPixKey(storeData.pix_key || "");
     setPixCity(storeData.pix_city || "BRASILIA");
     setLogoUrl(storeData.logo_url || "");
@@ -509,16 +513,6 @@ export default function AdminDashboardPage() {
             </div>
 
             <div className="flex items-center gap-2">
-              {isSuperAdmin && (
-                <Link
-                  href="/superadmin"
-                  className="px-3 py-2 bg-purple-500/25 hover:bg-purple-500/40 active:scale-95 text-purple-200 rounded-2xl border border-purple-400/40 text-xs font-extrabold transition-all duration-150 shadow-xs flex items-center gap-1.5"
-                  title="Painel SuperAdmin"
-                >
-                  <Shield className="w-3.5 h-3.5 text-purple-300" />
-                  <span className="hidden sm:inline">SuperAdmin</span>
-                </Link>
-              )}
               <a
                 href={`/${store.slug}`}
                 target="_blank"
@@ -806,242 +800,102 @@ export default function AdminDashboardPage() {
 
         {tab === "whatsapp" && (
           <div className="space-y-4">
-            {isSuperAdmin ? (
-              /* Visão do SuperAdmin: Gerenciamento do Robô Central Baileys */
-              <div className="bg-white rounded-[32px] p-6 sm:p-7 border border-slate-200/70 shadow-sm shadow-slate-200/50 space-y-4">
-                <div className="flex items-center gap-2 p-3 bg-purple-50 border border-purple-200/80 rounded-2xl text-xs font-bold text-purple-900">
-                  <Shield className="w-4 h-4 text-purple-700 shrink-0" />
-                  <span>Painel do SuperAdmin • Você está configurando o Robô Oficial que envia cobranças para todas as lojas da plataforma.</span>
+            {/* Visão do Lojista: Explicação amigável, sem QR Code */}
+            <div className="bg-white rounded-[32px] p-6 sm:p-7 border border-slate-200/70 shadow-sm shadow-slate-200/50 space-y-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/80">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    Robô Central Conectado 24/7
+                  </span>
+                  <h3 className="font-extrabold text-xl text-slate-900 mt-2 tracking-tight">
+                    Cobranças Automáticas no WhatsApp
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-1 font-medium leading-relaxed">
+                    Sua loja está 100% conectada ao robô oficial do <strong>meufiadim</strong>. Você não precisa ler QR Code nem deixar seu telefone ligado: nosso sistema cuida de tudo!
+                  </p>
                 </div>
-
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <span className={`inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase px-3 py-1 rounded-full border ${
-                      zapConnected 
-                        ? "bg-emerald-50 text-emerald-800 border-emerald-200/80"
-                        : "bg-amber-50 text-amber-800 border-amber-200/80"
-                    }`}>
-                      <span className={`w-2 h-2 rounded-full ${zapConnected ? "bg-emerald-500 animate-pulse" : "bg-amber-500"}`} />
-                      {zapConnected ? "Robô Conectado 24/7" : "Aguardando Conexão"}
-                    </span>
-                    <h3 className="font-extrabold text-xl text-slate-900 mt-2 tracking-tight">
-                      Robô Central de WhatsApp (Baileys)
-                    </h3>
-                    <p className="text-xs text-slate-500 mt-1 font-medium leading-relaxed">
-                      Conecte o número de WhatsApp oficial da plataforma. Todas as lojas usarão este número central para disparar lembretes educados de fiado com o botão Copiar Pix de cada lojista.
-                    </p>
-                  </div>
-                  <div className="w-13 h-13 rounded-2xl bg-purple-50 border border-purple-100/80 text-purple-600 flex items-center justify-center shrink-0 shadow-xs">
-                    <MessageCircle className="w-6 h-6 stroke-[2]" />
-                  </div>
+                <div className="w-13 h-13 rounded-2xl bg-emerald-50 border border-emerald-100/80 text-emerald-600 flex items-center justify-center shrink-0 shadow-xs">
+                  <MessageCircle className="w-6 h-6 stroke-[2]" />
                 </div>
-
-                {/* Status Conectado */}
-                {zapConnected ? (
-                  <div className="p-5 bg-gradient-to-br from-emerald-50 via-emerald-50/60 to-teal-50 rounded-2xl border border-emerald-200/80 space-y-4">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shadow-sm">
-                        <CheckCircle2 className="w-6 h-6" />
-                      </div>
-                      <div>
-                        <h4 className="font-extrabold text-sm text-emerald-950">
-                          O WhatsApp Central da plataforma está 100% ativo!
-                        </h4>
-                        <p className="text-xs text-emerald-700 font-medium">
-                          Pronto para enviar cobranças manuais e automáticas para clientes de todas as lojas cadastradas.
-                        </p>
-                      </div>
-                    </div>
-
-                    <div className="pt-2 flex flex-col sm:flex-row gap-2.5">
-                      <button
-                        onClick={fetchZapStatus}
-                        className="px-4 py-2.5 bg-white hover:bg-emerald-100 text-emerald-800 border border-emerald-200 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition active:scale-95 shadow-xs"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" /> Atualizar Status
-                      </button>
-                      <button
-                        onClick={handleDisconnectZap}
-                        disabled={disconnectingZap}
-                        className="px-4 py-2.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition active:scale-95"
-                      >
-                        {disconnectingZap ? "Desconectando..." : "Desconectar WhatsApp"}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  /* Status Desconectado: Exibe QR Code Dentro do Admin para o Superadmin */
-                  <div className="space-y-4">
-                    {!zapConfigured && (
-                      <div className="p-4 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 space-y-1">
-                        <p className="font-extrabold">⚠️ Configuração de Servidor Pendente</p>
-                        <p>Adicione a variável <code>ZAP_API_URL</code> nas Environment Variables da Vercel com a URL do seu Railway para carregar o QR Code aqui.</p>
-                      </div>
-                    )}
-
-                    <div className="bg-slate-50 rounded-3xl p-6 border border-slate-200/80 text-center space-y-4">
-                      {zapLoading && !zapQR ? (
-                        <div className="py-12 space-y-3">
-                          <RefreshCw className="w-8 h-8 text-emerald-600 animate-spin mx-auto" />
-                          <p className="text-sm font-extrabold text-slate-800">
-                            Gerando QR Code de Conexão...
-                          </p>
-                          <p className="text-xs text-slate-400">
-                            Isso leva apenas alguns instantes.
-                          </p>
-                        </div>
-                      ) : zapQR ? (
-                        <div className="space-y-4">
-                          <div className="inline-block bg-white p-3 rounded-3xl border border-slate-200/80 shadow-lg">
-                            <img
-                              src={zapQR}
-                              alt="QR Code WhatsApp"
-                              className="w-64 h-64 mx-auto rounded-2xl"
-                            />
-                          </div>
-                          <div className="flex items-center justify-center gap-2">
-                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                            <p className="text-xs font-extrabold text-slate-700">
-                              QR Code Ativo • Escaneie com a câmera do WhatsApp oficial
-                            </p>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="py-8 space-y-3">
-                          <Smartphone className="w-10 h-10 text-slate-300 mx-auto" />
-                          <p className="text-sm font-extrabold text-slate-700">
-                            Aguardando início do Baileys
-                          </p>
-                          <button
-                            onClick={fetchZapStatus}
-                            className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-extrabold hover:bg-emerald-500 transition"
-                          >
-                            Carregar QR Code
-                          </button>
-                        </div>
-                      )}
-
-                      {/* Instruções passo a passo */}
-                      <div className="max-w-sm mx-auto text-left bg-white p-4 rounded-2xl border border-slate-200/60 shadow-xs space-y-2 text-xs text-slate-600">
-                        <p className="font-extrabold text-slate-900 flex items-center gap-1.5">
-                          <Smartphone className="w-4 h-4 text-emerald-600" /> Como conectar:
-                        </p>
-                        <ol className="list-decimal list-inside space-y-1 font-medium text-slate-700">
-                          <li>Abra o <strong>WhatsApp</strong> no celular oficial do MeuFiadim</li>
-                          <li>Toque no menu (3 pontinhos ou Ajustes)</li>
-                          <li>Selecione <strong>Aparelhos Conectados</strong></li>
-                          <li>Toque em <strong>Conectar Aparelho</strong> e aponte a câmera para o QR Code acima</li>
-                        </ol>
-                      </div>
-
-                      <button
-                        onClick={fetchZapStatus}
-                        className="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold transition active:scale-95"
-                      >
-                        <RefreshCw className="w-3.5 h-3.5" /> Atualizar QR Code
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
-            ) : (
-              /* Visão do Lojista Normal: Explicação amigável, sem QR Code */
-              <div className="bg-white rounded-[32px] p-6 sm:p-7 border border-slate-200/70 shadow-sm shadow-slate-200/50 space-y-6">
-                <div className="flex items-start justify-between gap-4">
-                  <div>
-                    <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200/80">
-                      <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                      Robô Central Conectado 24/7
-                    </span>
-                    <h3 className="font-extrabold text-xl text-slate-900 mt-2 tracking-tight">
-                      Cobranças Automáticas no WhatsApp
-                    </h3>
-                    <p className="text-xs text-slate-500 mt-1 font-medium leading-relaxed">
-                      Sua loja está 100% conectada ao robô oficial do <strong>meufiadim</strong>. Você não precisa ler QR Code nem deixar seu telefone ligado: nosso sistema cuida de tudo!
-                    </p>
+
+              {/* Cards de Como Funciona */}
+              <div className="grid sm:grid-cols-3 gap-3">
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/60 space-y-1.5">
+                  <div className="w-7 h-7 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-extrabold text-xs">
+                    1
                   </div>
-                  <div className="w-13 h-13 rounded-2xl bg-emerald-50 border border-emerald-100/80 text-emerald-600 flex items-center justify-center shrink-0 shadow-xs">
-                    <MessageCircle className="w-6 h-6 stroke-[2]" />
-                  </div>
+                  <p className="text-xs font-extrabold text-slate-800">Você Anota o Fiado</p>
+                  <p className="text-[11px] text-slate-500 leading-snug">
+                    Cadastre seu cliente e o valor com a data combinada de vencimento na aba <strong>Fiado</strong>.
+                  </p>
                 </div>
 
-                {/* Cards de Como Funciona */}
-                <div className="grid sm:grid-cols-3 gap-3">
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/60 space-y-1.5">
-                    <div className="w-7 h-7 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-extrabold text-xs">
-                      1
-                    </div>
-                    <p className="text-xs font-extrabold text-slate-800">Você Anota o Fiado</p>
-                    <p className="text-[11px] text-slate-500 leading-snug">
-                      Cadastre seu cliente e o valor com a data combinada de vencimento na aba <strong>Fiado</strong>.
-                    </p>
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/60 space-y-1.5">
+                  <div className="w-7 h-7 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-extrabold text-xs">
+                    2
                   </div>
-
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/60 space-y-1.5">
-                    <div className="w-7 h-7 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-extrabold text-xs">
-                      2
-                    </div>
-                    <p className="text-xs font-extrabold text-slate-800">Lembrete Automático</p>
-                    <p className="text-[11px] text-slate-500 leading-snug">
-                      Às 09h do dia combinado, o robô dispara a mensagem educada com a fatura e o botão Pix.
-                    </p>
-                  </div>
-
-                  <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/60 space-y-1.5">
-                    <div className="w-7 h-7 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-extrabold text-xs">
-                      3
-                    </div>
-                    <p className="text-xs font-extrabold text-slate-800">Pix Direto na sua Conta</p>
-                    <p className="text-[11px] text-slate-500 leading-snug">
-                      O cliente copia o código Pix e paga. O dinheiro cai direto na sua conta bancária sem intermediários!
-                    </p>
-                  </div>
+                  <p className="text-xs font-extrabold text-slate-800">Lembrete Automático</p>
+                  <p className="text-[11px] text-slate-500 leading-snug">
+                    Às 09h do dia combinado, o robô dispara a mensagem educada com a fatura e o botão Pix.
+                  </p>
                 </div>
 
-                {/* Status da Chave Pix */}
-                <div className="p-4 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                  <div>
-                    <p className="font-extrabold text-emerald-950 flex items-center gap-1.5">
-                      <ShieldCheck className="w-4 h-4 text-emerald-600" />
-                      Chave Pix vinculada para recebimento:
-                    </p>
-                    <p className="text-emerald-800 font-mono font-bold mt-0.5">
-                      {store.pix_key ? store.pix_key : "⚠️ Nenhuma chave cadastrada! Cadastre na aba Fatura para receber."}
-                    </p>
+                <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/60 space-y-1.5">
+                  <div className="w-7 h-7 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center font-extrabold text-xs">
+                    3
                   </div>
-                  <button
-                    onClick={() => setTab("fatura")}
-                    className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-extrabold text-xs shrink-0 transition"
-                  >
-                    {store.pix_key ? "Configurar Pix" : "Cadastrar Chave Pix"}
-                  </button>
+                  <p className="text-xs font-extrabold text-slate-800">Pix Direto na sua Conta</p>
+                  <p className="text-[11px] text-slate-500 leading-snug">
+                    O cliente copia o código Pix e paga. O dinheiro cai direto na sua conta bancária sem intermediários!
+                  </p>
                 </div>
+              </div>
 
-                {/* Prévia da Mensagem que o cliente recebe */}
-                <div className="bg-slate-900 text-white p-5 rounded-2xl space-y-3 shadow-lg shadow-slate-900/10">
-                  <div className="flex items-center justify-between text-xs border-b border-slate-800 pb-2.5">
-                    <span className="font-extrabold text-slate-300 flex items-center gap-1.5">
-                      <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
-                      Prévia da Mensagem Enviada ao seu Cliente:
-                    </span>
-                    <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
-                      Disparo Automático
-                    </span>
-                  </div>
-                  <div className="bg-[#0b141a] p-4 rounded-xl text-xs font-mono text-slate-200 leading-relaxed border border-slate-800/80 space-y-1">
-                    <p className="text-emerald-400 font-bold">Olá, João! Tudo bem?</p>
-                    <p>Passando para lembrar do seu fiado em aberto na *{store.name}*:</p>
-                    <p className="text-amber-300 font-bold pt-1">💰 *Valor em aberto:* R$ 120,00</p>
-                    <p className="text-slate-400">📅 *Data final de pagamento:* 25/11/2026</p>
-                    <p className="text-slate-300 pt-1">Para pagar agora, toque em *"Copiar código Pix"* na mensagem abaixo 👇</p>
-                    <div className="mt-2.5 bg-[#1f2c34] p-2.5 rounded-lg text-emerald-400 text-[11px] font-sans flex items-center justify-between">
-                      <span className="truncate pr-2">00020126...{store.pix_key || "sua-chave-pix"}...5802BR59...</span>
-                      <span className="font-bold uppercase text-[10px] bg-emerald-500 text-slate-950 px-2 py-0.5 rounded shrink-0">Copiar</span>
-                    </div>
+              {/* Status da Chave Pix */}
+              <div className="p-4 bg-emerald-50/70 border border-emerald-200/80 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+                <div>
+                  <p className="font-extrabold text-emerald-950 flex items-center gap-1.5">
+                    <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                    Chave Pix vinculada para recebimento:
+                  </p>
+                  <p className="text-emerald-800 font-mono font-bold mt-0.5">
+                    {store.pix_key ? store.pix_key : "⚠️ Nenhuma chave cadastrada! Cadastre na aba Fatura para receber."}
+                  </p>
+                </div>
+                <button
+                  onClick={() => setTab("fatura")}
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-extrabold text-xs shrink-0 transition"
+                >
+                  {store.pix_key ? "Configurar Pix" : "Cadastrar Chave Pix"}
+                </button>
+              </div>
+
+              {/* Prévia da Mensagem que o cliente recebe */}
+              <div className="bg-slate-900 text-white p-5 rounded-2xl space-y-3 shadow-lg shadow-slate-900/10">
+                <div className="flex items-center justify-between text-xs border-b border-slate-800 pb-2.5">
+                  <span className="font-extrabold text-slate-300 flex items-center gap-1.5">
+                    <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                    Prévia da Mensagem Enviada ao seu Cliente:
+                  </span>
+                  <span className="text-[10px] text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-0.5 rounded-full border border-emerald-500/20">
+                    Disparo Automático
+                  </span>
+                </div>
+                <div className="bg-[#0b141a] p-4 rounded-xl text-xs font-mono text-slate-200 leading-relaxed border border-slate-800/80 space-y-1">
+                  <p className="text-emerald-400 font-bold">Olá, João! Tudo bem?</p>
+                  <p>Passando para lembrar do seu fiado em aberto na *{store.name}*:</p>
+                  <p className="text-amber-300 font-bold pt-1">💰 *Valor em aberto:* R$ 120,00</p>
+                  <p className="text-slate-400">📅 *Data final de pagamento:* 25/11/2026</p>
+                  <p className="text-slate-300 pt-1">Para pagar agora, toque em *"Copiar código Pix"* na mensagem abaixo 👇</p>
+                  <div className="mt-2.5 bg-[#1f2c34] p-2.5 rounded-lg text-emerald-400 text-[11px] font-sans flex items-center justify-between">
+                    <span className="truncate pr-2">00020126...{store.pix_key || "sua-chave-pix"}...5802BR59...</span>
+                    <span className="font-bold uppercase text-[10px] bg-emerald-500 text-slate-950 px-2 py-0.5 rounded shrink-0">Copiar</span>
                   </div>
                 </div>
               </div>
-            )}
+            </div>
           </div>
         )}
 
