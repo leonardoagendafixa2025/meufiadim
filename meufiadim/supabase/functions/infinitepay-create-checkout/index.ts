@@ -161,7 +161,10 @@ serve(async (req) => {
     }
 
     const checkoutUrl = ipData.url || ipData.checkout_url || ipData.link;
-    const invoiceSlug = ipData.slug || ipData.invoice_slug || null;
+    const urlSlug = checkoutUrl
+      ? String(checkoutUrl).split("/").filter(Boolean).pop() || null
+      : null;
+    const invoiceSlug = ipData.slug || ipData.invoice_slug || urlSlug || null;
 
     if (!checkoutUrl) {
       return jsonResponse(

@@ -282,7 +282,10 @@ export async function executeCreateCheckout(params: {
   }
 
   const checkoutUrl = ipData.url || ipData.checkout_url || ipData.link;
-  const invoiceSlug = ipData.slug || ipData.invoice_slug || null;
+  const urlSlug = checkoutUrl
+    ? String(checkoutUrl).split("/").filter(Boolean).pop() || null
+    : null;
+  const invoiceSlug = ipData.slug || ipData.invoice_slug || urlSlug || null;
 
   if (!checkoutUrl) {
     return { ok: false, status: 502, data: { error: "InfinitePay não retornou checkout_url" } };
