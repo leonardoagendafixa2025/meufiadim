@@ -256,6 +256,7 @@ export default function SuperAdminPage() {
   const [adminPixCity, setAdminPixCity] = useState("BRASILIA");
   const [adminWhatsapp, setAdminWhatsapp] = useState("");
   const [savingAdminSettings, setSavingAdminSettings] = useState(false);
+  const [chargingCommissionStoreId, setChargingCommissionStoreId] = useState<string | null>(null);
 
   // Campanhas & Comunicados para Lojistas
   const [campaignTarget, setCampaignTarget] = useState<
@@ -599,6 +600,60 @@ export default function SuperAdminPage() {
       showToast(err.message, "error");
     } finally {
       setSavingAdminSettings(false);
+    }
+  }
+
+  async function handleChargeCommissionInfinitePay(storeItem: StoreItem) {
+    const commissionVal = Number(storeItem.metrics?.totalCommission || 0);
+    if (commissionVal < 1) {
+      showToast("O valor mínimo para gerar cobrança na InfinitePay é R$ 1,00.", "error");
+      return;
+    }
+
+    const ok = confirm(
+      `Confirmar cobrança de comissão via InfinitePay?\n\n` +
+        `Lojista: ${storeItem.name}\n` +
+        `Comissão acumulada (${storeItem.commission_rate}%): ${formatBRL(commissionVal)}\n\n` +
+        `⚠️ O acesso operacional da loja será bloqueado automaticamente até a confirmação oficial do pagamento na InfinitePay.`
+    );
+    if (!ok) return;
+
+    try {
+      setChargingCommissionStoreId(storeItem.id);
+      const token = await getAccessToken();
+      if (!token) throw new Error("Sessão expirada.");
+
+      const res = await fetch("/api/superadmin/charges", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          merchantId: storeItem.id,
+          amountCents: Math.round(commissionVal * 100),
+          description: `Comissão sobre vendas (${storeItem.commission_rate}%) — ${storeItem.name}`,
+          reason: `Cobrança oficial de comissão acumulada sobre ${formatBRL(storeItem.metrics?.totalSales || 0)} em vendas`,
+          generateCheckout: true,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao gerar cobrança InfinitePay.");
+
+      showToast(
+        data.checkoutError
+          ? `Cobrança criada e loja bloqueada! Aviso no link: ${data.checkoutError}`
+          : `Cobrança de ${formatBRL(commissionVal)} gerada na InfinitePay! Loja bloqueada até o pagamento.`,
+        data.checkoutError ? "error" : "success"
+      );
+
+      await loadPlatformData();
+      setActiveTab("charges");
+    } catch (err: any) {
+      showToast(err.message, "error");
+    } finally {
+      setChargingCommissionStoreId(null);
     }
   }
 
@@ -2514,117 +2569,95 @@ export default function SuperAdminPage() {
         )}
 
         {/* ============================================================================== */}
-        {/* ABA: FATURAS & COMISSÕES */}
+        {/* ABA: FATURAS & COMISSÕES (EXCLUSIVO INFINITEPAY) */}
         {/* ============================================================================== */}
         {activeTab === "invoices" && (
           <div className="space-y-6">
-            {/* Card Principal: Configuração da Chave Pix do SuperAdmin */}
+            {/* Card Principal: Cobrar Comissões via InfinitePay */}
             <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/70 shadow-sm shadow-slate-200/50 space-y-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
                 <div className="flex items-center gap-3">
-                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white flex items-center justify-center shadow-md shadow-purple-500/25">
-                    <KeyRound className="w-6 h-6 stroke-[2]" />
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-600 to-indigo-600 text-white flex items-center justify-center shadow-md shadow-purple-500/25">
+                    <CreditCard className="w-6 h-6 stroke-[2]" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <h3 className="text-lg font-extrabold text-slate-900">
-                        Chave Pix Oficial da Plataforma
+                        Cobrança de Comissões via InfinitePay
                       </h3>
                       <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
-                        Recebimento de Comissões
+                        Baixa & Bloqueio Automático
                       </span>
                     </div>
                     <p className="text-xs text-slate-500 font-medium mt-0.5">
-                      Esta é a conta bancária para onde os lojistas farão o pagamento da comissão das vendas.
+                      Recebimento exclusivo pela InfinitePay (Pix ou Cartão) com verificação oficial e bloqueio imediato para evitar inadimplência.
                     </p>
                   </div>
                 </div>
 
-                {adminPixKey ? (
-                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold">
-                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                    <span>Pix Ativo para Cobrança</span>
-                  </div>
-                ) : (
-                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold">
-                    <AlertCircle className="w-4 h-4 text-amber-600" />
-                    <span>Pendente de Configuração</span>
-                  </div>
-                )}
+                <button
+                  onClick={() => setActiveTab("charges")}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-700 text-xs font-extrabold border border-purple-200 transition shrink-0 self-start sm:self-auto"
+                >
+                  <CreditCard className="w-4 h-4" />
+                  <span>Ir para Financeiro → Cobranças</span>
+                </button>
               </div>
 
-              {/* Formulário de Configuração Pix */}
-              <form onSubmit={handleSaveAdminSettings} className="space-y-4 pt-2">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700 block">
-                      Sua Chave Pix (CPF, CNPJ, Celular, E-mail ou Aleatória) *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ex: 123.456.789-00 ou financeiro@meufiadim.com"
-                      value={adminPixKey}
-                      onChange={(e) => setAdminPixKey(e.target.value)}
-                      required
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition"
-                    />
+              {/* Lista de Lojistas com Comissão Acumulada */}
+              <div className="divide-y divide-slate-100 border border-slate-200/70 rounded-2xl overflow-hidden">
+                {stores.filter((s) => (s.metrics?.totalCommission || 0) > 0 || (s.metrics?.totalSales || 0) > 0).length === 0 ? (
+                  <div className="py-10 text-center text-slate-400 text-xs font-medium">
+                    Nenhuma loja possui comissão acumulada sobre vendas registradas até o momento.
                   </div>
+                ) : (
+                  stores
+                    .filter((s) => (s.metrics?.totalCommission || 0) > 0 || (s.metrics?.totalSales || 0) > 0)
+                    .map((s) => {
+                      const comm = Number(s.metrics?.totalCommission || 0);
+                      const isCharging = chargingCommissionStoreId === s.id;
+                      return (
+                        <div
+                          key={s.id}
+                          className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50 transition"
+                        >
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-black text-sm text-slate-900">{s.name}</span>
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                                Taxa {s.commission_rate}%
+                              </span>
+                              {s.status === "blocked" && (
+                                <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-rose-100 text-rose-700">
+                                  Bloqueada
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-xs text-slate-500 mt-0.5">
+                              Vendas registradas: <strong>{formatBRL(s.metrics?.totalSales || 0)}</strong> • Comissão calculada:{" "}
+                              <strong className="text-purple-700">{formatBRL(comm)}</strong>
+                            </p>
+                          </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700 block">
-                      Nome do Titular da Conta (para conferência do lojista) *
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ex: Leonardo Agência / MeuFiadim"
-                      value={adminPixName}
-                      onChange={(e) => setAdminPixName(e.target.value)}
-                      required
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700 block">
-                      Cidade da Conta Bancária (padrão Bacen)
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ex: BELO HORIZONTE ou BRASILIA"
-                      value={adminPixCity}
-                      onChange={(e) => setAdminPixCity(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-xs font-bold text-slate-700 block">
-                      WhatsApp para Receber Comprovantes
-                    </label>
-                    <input
-                      type="text"
-                      placeholder="Ex: 31988943288"
-                      value={adminWhatsapp}
-                      onChange={(e) => setAdminWhatsapp(e.target.value)}
-                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
-                  <p className="text-xs text-slate-500">
-                    Ao salvar, o robô e o painel do lojista passarão a gerar automaticamente o QR Code e o Pix Copia e Cola para esta chave.
-                  </p>
-                  <button
-                    type="submit"
-                    disabled={savingAdminSettings}
-                    className="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-2xl text-xs sm:text-sm font-extrabold shadow-md shadow-purple-600/25 active:scale-95 transition shrink-0 disabled:opacity-60"
-                  >
-                    <Check className="w-4 h-4 stroke-[2.5]" />
-                    <span>{savingAdminSettings ? "Salvando..." : "Salvar Chave Pix da Plataforma"}</span>
-                  </button>
-                </div>
-              </form>
+                          <button
+                            disabled={comm < 1 || isCharging}
+                            onClick={() => handleChargeCommissionInfinitePay(s)}
+                            className="px-4 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-black flex items-center justify-center gap-1.5 shadow-sm transition shrink-0"
+                          >
+                            <CreditCard className="w-3.5 h-3.5" />
+                            <span>
+                              {isCharging
+                                ? "Gerando..."
+                                : comm < 1
+                                ? "Mínimo R$ 1,00"
+                                : `Cobrar ${formatBRL(comm)} via InfinitePay`}
+                            </span>
+                          </button>
+                        </div>
+                      );
+                    })
+                )}
+              </div>
             </div>
 
             {/* Faturas de Comissão */}

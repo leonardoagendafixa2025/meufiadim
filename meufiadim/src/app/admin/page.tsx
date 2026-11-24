@@ -1797,13 +1797,17 @@ export default function AdminDashboardPage() {
                 <span className="text-slate-900 font-extrabold text-sm">{store.commission_rate}%</span>
               </div>
 
+              <div className="p-3.5 rounded-2xl bg-purple-50/70 border border-purple-200/70 text-xs text-purple-900 font-medium leading-relaxed">
+                As cobranças de comissão e regularização da plataforma são emitidas oficialmente pela administração via <strong>InfinitePay (Pix ou Cartão)</strong> com confirmação automática.
+              </div>
+
               <button
-                onClick={handlePayInvoice}
-                disabled={totalCommissionDue <= 0 || loadingMp}
-                className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 disabled:from-slate-200 disabled:to-slate-200 disabled:text-slate-400 text-white py-4 px-4 rounded-2xl font-extrabold text-sm flex items-center justify-center gap-2.5 shadow-lg shadow-emerald-600/25 hover:shadow-emerald-600/40 hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-150 disabled:shadow-none disabled:pointer-events-none"
+                type="button"
+                onClick={() => setTab("cobrancas")}
+                className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white py-4 px-4 rounded-2xl font-extrabold text-sm flex items-center justify-center gap-2.5 shadow-lg shadow-emerald-600/25 hover:shadow-emerald-600/40 hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-150"
               >
-                <QrCode className="w-5 h-5 stroke-[2]" />
-                <span>{loadingMp ? "Gerando Pix..." : "Pagar Fatura com Pix"}</span>
+                <CreditCard className="w-5 h-5 stroke-[2]" />
+                <span>Ver Minhas Cobranças (InfinitePay)</span>
               </button>
             </div>
 
