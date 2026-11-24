@@ -185,6 +185,13 @@ export default function SuperAdminPage() {
     text: string;
   } | null>(null);
 
+  // Configurações de Recebimento Pix do SuperAdmin
+  const [adminPixKey, setAdminPixKey] = useState("");
+  const [adminPixName, setAdminPixName] = useState("MeuFiadim Plataforma");
+  const [adminPixCity, setAdminPixCity] = useState("BRASILIA");
+  const [adminWhatsapp, setAdminWhatsapp] = useState("");
+  const [savingAdminSettings, setSavingAdminSettings] = useState(false);
+
   useEffect(() => {
     initDashboard();
   }, []);
@@ -272,8 +279,51 @@ export default function SuperAdminPage() {
       setStats(data.stats);
       setStores(data.stores);
       setInvoices(data.invoices);
+      if (data.settings) {
+        setAdminPixKey(data.settings.pix_key || "");
+        setAdminPixName(data.settings.pix_name || "MeuFiadim Plataforma");
+        setAdminPixCity(data.settings.pix_city || "BRASILIA");
+        setAdminWhatsapp(data.settings.whatsapp || "");
+      }
     } catch (err: any) {
       showToast(err.message, "error");
+    }
+  }
+
+  async function handleSaveAdminSettings(e: React.FormEvent) {
+    e.preventDefault();
+    if (!adminPixKey.trim()) {
+      showToast("Informe a sua Chave Pix oficial.", "error");
+      return;
+    }
+
+    try {
+      setSavingAdminSettings(true);
+      const token = await getAccessToken();
+      if (!token) throw new Error("Sessão expirada.");
+
+      const res = await fetch("/api/superadmin/settings", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          pix_key: adminPixKey.trim(),
+          pix_name: adminPixName.trim() || "MeuFiadim Plataforma",
+          pix_city: adminPixCity.trim() || "BRASILIA",
+          whatsapp: adminWhatsapp.trim(),
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Erro ao salvar configurações Pix.");
+
+      showToast("Chave Pix oficial da plataforma atualizada com sucesso!");
+    } catch (err: any) {
+      showToast(err.message, "error");
+    } finally {
+      setSavingAdminSettings(false);
     }
   }
 
@@ -1531,7 +1581,117 @@ export default function SuperAdminPage() {
         {/* ABA: FATURAS & COMISSÕES */}
         {/* ============================================================================== */}
         {activeTab === "invoices" && (
-          <div className="space-y-4">
+          <div className="space-y-6">
+            {/* Card Principal: Configuração da Chave Pix do SuperAdmin */}
+            <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/70 shadow-sm shadow-slate-200/50 space-y-5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-purple-500 to-indigo-600 text-white flex items-center justify-center shadow-md shadow-purple-500/25">
+                    <KeyRound className="w-6 h-6 stroke-[2]" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h3 className="text-lg font-extrabold text-slate-900">
+                        Chave Pix Oficial da Plataforma
+                      </h3>
+                      <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                        Recebimento de Comissões
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-500 font-medium mt-0.5">
+                      Esta é a conta bancária para onde os lojistas farão o pagamento da comissão das vendas.
+                    </p>
+                  </div>
+                </div>
+
+                {adminPixKey ? (
+                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs font-bold">
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                    <span>Pix Ativo para Cobrança</span>
+                  </div>
+                ) : (
+                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 text-xs font-bold">
+                    <AlertCircle className="w-4 h-4 text-amber-600" />
+                    <span>Pendente de Configuração</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Formulário de Configuração Pix */}
+              <form onSubmit={handleSaveAdminSettings} className="space-y-4 pt-2">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 block">
+                      Sua Chave Pix (CPF, CNPJ, Celular, E-mail ou Aleatória) *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: 123.456.789-00 ou financeiro@meufiadim.com"
+                      value={adminPixKey}
+                      onChange={(e) => setAdminPixKey(e.target.value)}
+                      required
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 block">
+                      Nome do Titular da Conta (para conferência do lojista) *
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: Leonardo Agência / MeuFiadim"
+                      value={adminPixName}
+                      onChange={(e) => setAdminPixName(e.target.value)}
+                      required
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 block">
+                      Cidade da Conta Bancária (padrão Bacen)
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: BELO HORIZONTE ou BRASILIA"
+                      value={adminPixCity}
+                      onChange={(e) => setAdminPixCity(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition"
+                    />
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <label className="text-xs font-bold text-slate-700 block">
+                      WhatsApp para Receber Comprovantes
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Ex: 31988943288"
+                      value={adminWhatsapp}
+                      onChange={(e) => setAdminWhatsapp(e.target.value)}
+                      className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-purple-500 focus:bg-white transition"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+                  <p className="text-xs text-slate-500">
+                    Ao salvar, o robô e o painel do lojista passarão a gerar automaticamente o QR Code e o Pix Copia e Cola para esta chave.
+                  </p>
+                  <button
+                    type="submit"
+                    disabled={savingAdminSettings}
+                    className="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white rounded-2xl text-xs sm:text-sm font-extrabold shadow-md shadow-purple-600/25 active:scale-95 transition shrink-0 disabled:opacity-60"
+                  >
+                    <Check className="w-4 h-4 stroke-[2.5]" />
+                    <span>{savingAdminSettings ? "Salvando..." : "Salvar Chave Pix da Plataforma"}</span>
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Faturas de Comissão */}
             <div className="bg-white p-6 sm:p-7 rounded-3xl border border-slate-200/70 shadow-sm shadow-slate-200/50 space-y-4">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                 <div>

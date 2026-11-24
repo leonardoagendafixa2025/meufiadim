@@ -141,6 +141,9 @@ export default function AdminDashboardPage() {
   const [mpPix, setMpPix] = useState<{
     qrCodeBase64: string;
     qrCode: string;
+    adminPixKey?: string;
+    adminPixName?: string;
+    adminWhatsapp?: string;
   } | null>(null);
   const [loadingMp, setLoadingMp] = useState(false);
 
@@ -458,7 +461,13 @@ export default function AdminDashboardPage() {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao gerar Pix");
-      setMpPix({ qrCodeBase64: data.qr_code_base64, qrCode: data.qr_code });
+      setMpPix({
+        qrCodeBase64: data.qr_code_base64,
+        qrCode: data.qr_code,
+        adminPixKey: data.admin_pix_key,
+        adminPixName: data.admin_pix_name,
+        adminWhatsapp: data.admin_whatsapp,
+      });
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -1381,9 +1390,12 @@ export default function AdminDashboardPage() {
 
       {mpPix && (
         <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-sm rounded-[32px] p-7 text-center space-y-4 shadow-2xl border border-slate-100 ring-1 ring-black/5">
+          <div className="bg-white w-full max-w-sm rounded-[32px] p-6 sm:p-7 text-center space-y-4 shadow-2xl border border-slate-100 ring-1 ring-black/5">
             <div className="flex justify-between items-center">
-              <h3 className="font-extrabold text-base text-slate-900">Pagar Fatura meufiadim</h3>
+              <div className="text-left">
+                <h3 className="font-extrabold text-base text-slate-900">Pagar Comissão da Loja</h3>
+                <p className="text-xs text-slate-400 font-medium">Pix oficial da plataforma meufiadim</p>
+              </div>
               <button
                 onClick={() => setMpPix(null)}
                 className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition"
@@ -1391,14 +1403,26 @@ export default function AdminDashboardPage() {
                 <X className="w-5 h-5" />
               </button>
             </div>
+
             <img
               src={`data:image/png;base64,${mpPix.qrCodeBase64}`}
               alt="QR Code Pix"
-              className="w-56 h-56 mx-auto rounded-3xl border border-slate-200/80 p-2 shadow-xs"
+              className="w-52 h-52 mx-auto rounded-3xl border border-slate-200/80 p-2 shadow-xs"
             />
-            <p className="text-xs text-slate-500 font-medium">
-              Assim que o Pix cair, sua loja é liberada automaticamente.
-            </p>
+
+            {mpPix.adminPixName && (
+              <div className="bg-slate-50 border border-slate-100 rounded-2xl p-3 text-xs text-slate-600 space-y-1 text-left">
+                <p className="font-bold text-slate-800">
+                  Favorecido: <span className="font-extrabold text-purple-700">{mpPix.adminPixName}</span>
+                </p>
+                {mpPix.adminPixKey && (
+                  <p className="font-medium text-slate-600 truncate">
+                    Chave Pix: <span className="font-bold text-slate-900">{mpPix.adminPixKey}</span>
+                  </p>
+                )}
+              </div>
+            )}
+
             <button
               onClick={() => {
                 navigator.clipboard.writeText(mpPix.qrCode);
@@ -1406,8 +1430,23 @@ export default function AdminDashboardPage() {
               }}
               className="w-full bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white py-3.5 px-4 rounded-2xl font-extrabold text-sm shadow-lg shadow-emerald-600/25 hover:shadow-emerald-600/40 hover:-translate-y-0.5 active:scale-[0.98] transition-all"
             >
-              Copiar código Pix
+              Copiar código Pix (Copia e Cola)
             </button>
+
+            {mpPix.adminWhatsapp && (
+              <a
+                href={`https://wa.me/55${mpPix.adminWhatsapp.replace(/\D/g, '')}?text=${encodeURIComponent(
+                  `Olá! Acabei de realizar o pagamento da comissão da loja *${store.name}* no valor de *${formatBRL(
+                    totalCommissionDue
+                  )}* via Pix. Segue o comprovante!`
+                )}`}
+                target="_blank"
+                rel="noreferrer"
+                className="w-full bg-slate-100 hover:bg-slate-200 text-slate-800 py-2.5 px-4 rounded-2xl font-bold text-xs flex items-center justify-center gap-2 transition"
+              >
+                <span>Enviar Comprovante no WhatsApp</span>
+              </a>
+            )}
           </div>
         </div>
       )}

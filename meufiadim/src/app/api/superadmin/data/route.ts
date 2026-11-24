@@ -154,6 +154,14 @@ export async function GET(req: Request) {
       .filter((inv) => inv.status === "paid")
       .reduce((acc, inv) => acc + Number(inv.commission_due || 0), 0);
 
+    const meta = user.user_metadata || {};
+    const settings = {
+      pix_key: meta.pix_key || "",
+      pix_name: meta.pix_name || "MeuFiadim Plataforma",
+      pix_city: meta.pix_city || "BRASILIA",
+      whatsapp: meta.whatsapp || "",
+    };
+
     return NextResponse.json({
       stats: {
         totalStores,
@@ -168,6 +176,7 @@ export async function GET(req: Request) {
       },
       stores: enrichedStores,
       invoices,
+      settings,
     });
   } catch (err: any) {
     return NextResponse.json(
