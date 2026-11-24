@@ -1,23 +1,39 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useEffect, useState, useRef, useMemo } from "react";
+import { useParams, useRouter } from "next/navigation";
 import {
-  ShoppingBag,
+  ArrowLeft,
+  Clock,
+  Sun,
+  Moon,
+  User,
+  Bike,
+  Calendar,
+  Flame,
+  Star,
+  Beer,
+  CupSoda,
+  Wine,
+  Utensils,
+  Cake,
+  Package,
+  Search,
   Plus,
   Minus,
-  MessageCircle,
-  Package,
+  ShoppingBag,
   X,
-  Search,
+  Store as StoreIcon,
+  ChevronRight,
+  MapPin,
+  MessageCircle,
   ShieldCheck,
   QrCode,
   Banknote,
   CreditCard,
   BookOpen,
-  MapPin,
-  Store as StoreIcon,
-  ChevronRight,
+  Sparkles,
+  Check,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { formatBRL } from "@/lib/whatsapp";
@@ -30,6 +46,8 @@ interface Store {
   status: "active" | "blocked";
   logo_url?: string | null;
   primary_color?: string | null;
+  delivery_time?: string | null;
+  min_order?: number | null;
 }
 
 interface Product {
@@ -40,6 +58,25 @@ interface Product {
   category: string;
   stock: number;
   image_url?: string;
+  is_featured?: boolean;
+}
+
+interface Neighborhood {
+  id: string;
+  name: string;
+  fee: number;
+  min_order?: number;
+  estimate?: string;
+  active: boolean;
+}
+
+interface CepRange {
+  id: string;
+  start_cep: string;
+  end_cep: string;
+  fee: number;
+  estimate?: string;
+  active: boolean;
 }
 
 const PAYMENT_OPTIONS = [
@@ -49,26 +86,91 @@ const PAYMENT_OPTIONS = [
   { id: "Dinheiro", label: "Dinheiro", desc: "Pagar na entrega", icon: Banknote },
 ];
 
+// Mapeamento dinâmico e inteligente de ícones para categorias populares
+function getCategoryIcon(categoryName: string, iconKey?: string) {
+  const norm = (iconKey || categoryName).toLowerCase().trim();
+  if (norm.includes("cervej") || norm.includes("chopp") || norm.includes("beer")) {
+    return { icon: Beer, color: "text-amber-500", bg: "bg-amber-50", emoji: "🍺" };
+  }
+  if (norm.includes("refri") || norm.includes("refrigerante") || norm.includes("suco") || norm.includes("soda") || norm.includes("água") || norm.includes("agua")) {
+    return { icon: CupSoda, color: "text-rose-500", bg: "bg-rose-50", emoji: "🥤" };
+  }
+  if (norm.includes("drink") || norm.includes("coquetel") || norm.includes("vinho") || norm.includes("dose") || norm.includes("destilad")) {
+    return { icon: Wine, color: "text-purple-500", bg: "bg-purple-50", emoji: "🍸" };
+  }
+  if (norm.includes("prato") || norm.includes("refei") || norm.includes("tira") || norm.includes("gosto") || norm.includes("porç") || norm.includes("porc") || norm.includes("lanche") || norm.includes("burger") || norm.includes("pizza") || norm.includes("petisco")) {
+    return { icon: Utensils, color: "text-emerald-500", bg: "bg-emerald-50", emoji: "🍽️" };
+  }
+  if (norm.includes("doce") || norm.includes("sobremesa") || norm.includes("pudim") || norm.includes("açaí") || norm.includes("sorvete") || norm.includes("cake")) {
+    return { icon: Cake, color: "text-pink-500", bg: "bg-pink-50", emoji: "🍮" };
+  }
+  return { icon: Package, color: "text-blue-500", bg: "bg-blue-50", emoji: "📦" };
+}
+
 export default function TenantStorePage() {
+  const router = useRouter();
   const { slug } = useParams<{ slug: string }>();
+
   const [store, setStore] = useState<Store | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Tema Claro / Escuro
+  const [isDark, setIsDark] = useState(false);
+
+  // Status e Entrega
+  const [isOpen, setIsOpen] = useState(true);
+  const [deliveryType, setDeliveryType] = useState<"entrega" | "retirada">("entrega");
+  const [deliveryTime, setDeliveryTime] = useState("30min");
+  const [minOrder, setMinOrder] = useState(25.0);
+  const [startingDeliveryFee, setStartingDeliveryFee] = useState<number | null>(5.0);
+
+  // Regras de frete cadastradas
+  const [neighborhoods, setNeighborhoods] = useState<Neighborhood[]>([]);
+  const [cepRanges, setCepRanges] = useState<CepRange[]>([]);
+  const [categoryIconsMap, setCategoryIconsMap] = useState<Record<string, string>>({});
+  const [featuredProductIds, setFeaturedProductIds] = useState<string[]>([]);
+
+  // Busca e Categoria ativa (Scroll Spy)
   const [search, setSearch] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState("Todos");
+  const [activeCategory, setActiveCategory] = useState<string>("Todos");
+
+  // Carrinho e Checkout
   const [cart, setCart] = useState<{ product: Product; qty: number }[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
-
   const [customerName, setCustomerName] = useState("");
-  const [deliveryType, setDeliveryType] = useState<"entrega" | "retirada">("entrega");
-  const [address, setAddress] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [selectedNeighborhood, setSelectedNeighborhood] = useState<string>("");
+  const [cepInput, setCepInput] = useState("");
+  const [addressStreet, setAddressStreet] = useState("");
+  const [addressNumber, setAddressNumber] = useState("");
+  const [addressComp, setAddressComp] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("Fiado");
   const [notes, setNotes] = useState("");
-  const [isOpen, setIsOpen] = useState(true);
+  const [calculatedFreight, setCalculatedFreight] = useState<number>(5.0);
+
+  // Modal de Detalhes do Produto
+  const [selectedProductDetails, setSelectedProductDetails] = useState<Product | null>(null);
+  const [modalQty, setModalQty] = useState(1);
+
+  // Modal de Reserva
+  const [reserveModalOpen, setReserveModalOpen] = useState(false);
+
+  // Notificação Toast rápida
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toastTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const showToast = (msg: string) => {
+    if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+    setToastMessage(msg);
+    toastTimeoutRef.current = setTimeout(() => {
+      setToastMessage(null);
+    }, 2200);
+  };
 
   useEffect(() => {
     async function loadStore() {
+      if (!slug) return;
       const { data: storeData } = await supabase
         .from("stores")
         .select("*")
@@ -77,101 +179,118 @@ export default function TenantStorePage() {
 
       if (storeData) {
         setStore(storeData);
+
         const { data: prodData } = await supabase
           .from("products")
           .select("*")
           .eq("store_id", storeData.id)
           .order("created_at", { ascending: false });
+
         setProducts(prodData || []);
 
-        // Consulta se a loja está aberta ou fechada para pedidos
-        fetch(`/api/store/status?slug=${slug}`)
-          .then((res) => res.json())
-          .then((data) => {
-            if (data && typeof data.is_open === "boolean") {
-              setIsOpen(data.is_open);
+        // Busca status de expediente e configurações de entrega
+        try {
+          const res = await fetch(`/api/store/status?slug=${slug}`);
+          const data = await res.json();
+          if (data && typeof data.is_open === "boolean") {
+            setIsOpen(data.is_open);
+          }
+        } catch {
+          // ignore
+        }
+
+        try {
+          const resDeliv = await fetch(`/api/store/delivery?slug=${slug}`);
+          const dataDeliv = await resDeliv.json();
+          if (dataDeliv?.ok) {
+            if (dataDeliv.neighborhoods) setNeighborhoods(dataDeliv.neighborhoods);
+            if (dataDeliv.cep_ranges) setCepRanges(dataDeliv.cep_ranges);
+            if (dataDeliv.category_icons) setCategoryIconsMap(dataDeliv.category_icons);
+            if (dataDeliv.featured_ids) setFeaturedProductIds(dataDeliv.featured_ids);
+            if (dataDeliv.delivery_time) setDeliveryTime(dataDeliv.delivery_time);
+            if (dataDeliv.min_order !== undefined) setMinOrder(dataDeliv.min_order);
+
+            // Calcula menor frete ativo
+            const activeFees = (dataDeliv.neighborhoods || [])
+              .filter((n: Neighborhood) => n.active)
+              .map((n: Neighborhood) => Number(n.fee));
+
+            if (activeFees.length > 0) {
+              setStartingDeliveryFee(Math.min(...activeFees));
             }
-          })
-          .catch(() => {});
+          }
+        } catch {
+          // fallback padrão
+        }
       }
       setLoading(false);
     }
-    if (slug) loadStore();
+
+    loadStore();
   }, [slug]);
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-[#F7F8FA] pb-24">
-        <div className="h-44 bg-gray-200 animate-pulse rounded-b-[2rem]" />
-        <div className="max-w-3xl mx-auto px-4 -mt-6 space-y-4">
-          <div className="h-12 bg-white rounded-2xl shadow-sm animate-pulse" />
-          <div className="grid grid-cols-2 gap-3">
-            {[1, 2, 3, 4].map((n) => (
-              <div key={n} className="h-60 bg-white rounded-3xl animate-pulse" />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // Lista de categorias únicas derivadas dos produtos
+  const categories = useMemo(() => {
+    const list = Array.from(new Set(products.map((p) => p.category?.trim() || "Geral")));
+    return list.filter(Boolean);
+  }, [products]);
 
-  if (!store) {
-    return (
-      <div className="min-h-screen bg-[#F7F8FA] flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-16 h-16 bg-gray-200 rounded-2xl flex items-center justify-center mb-4">
-          <StoreIcon className="w-8 h-8 text-gray-500" />
-        </div>
-        <h1 className="text-xl font-bold text-gray-900">Loja não encontrada</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Verifique o link com o vendedor e tente novamente.
-        </p>
-      </div>
-    );
-  }
+  // Produtos destacados
+  const featuredProducts = useMemo(() => {
+    return products.filter((p) => {
+      if (featuredProductIds.includes(p.id)) return true;
+      if (p.is_featured) return true;
+      return false;
+    });
+  }, [products, featuredProductIds]);
 
-  if (store.status === "blocked") {
-    return (
-      <div className="min-h-screen bg-[#F7F8FA] flex flex-col items-center justify-center p-6 text-center">
-        <div className="w-16 h-16 bg-red-100 rounded-2xl flex items-center justify-center mb-4">
-          <StoreIcon className="w-8 h-8 text-red-600" />
-        </div>
-        <h1 className="text-xl font-bold text-gray-900">{store.name}</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Esta vitrine está temporariamente pausada.
-        </p>
-      </div>
-    );
-  }
+  // Produtos filtrados por busca e categoria
+  const filteredProducts = useMemo(() => {
+    return products.filter((p) => {
+      const matchSearch =
+        search.trim() === "" ||
+        p.name.toLowerCase().includes(search.toLowerCase()) ||
+        (p.description && p.description.toLowerCase().includes(search.toLowerCase()));
+      return matchSearch;
+    });
+  }, [products, search]);
 
-  const brandColor = store.primary_color || "#059669";
+  // Agrupamento por categoria
+  const groupedProducts = useMemo(() => {
+    const map = new Map<string, Product[]>();
+    for (const cat of categories) {
+      map.set(cat, []);
+    }
+    for (const p of filteredProducts) {
+      const c = p.category?.trim() || "Geral";
+      if (!map.has(c)) {
+        map.set(c, []);
+      }
+      map.get(c)!.push(p);
+    }
+    return map;
+  }, [categories, filteredProducts]);
 
-  const categories = [
-    "Todos",
-    ...Array.from(new Set(products.map((p) => p.category || "Geral"))),
-  ];
+  // Quantidade no carrinho
+  const getQty = (id: string) => cart.find((i) => i.product.id === id)?.qty || 0;
 
-  const filteredProducts = products.filter((p) => {
-    const matchCat =
-      selectedCategory === "Todos" || (p.category || "Geral") === selectedCategory;
-    const matchSearch = p.name.toLowerCase().includes(search.toLowerCase());
-    return matchCat && matchSearch;
-  });
-
-  const getQty = (id: string) =>
-    cart.find((i) => i.product.id === id)?.qty || 0;
-
-  const addToCart = (product: Product) => {
+  const addToCart = (product: Product, quantityToAdd: number = 1) => {
+    if (!isOpen) {
+      showToast("Esta loja está fechada no momento para novos pedidos.");
+      return;
+    }
     setCart((prev) => {
       const exists = prev.find((i) => i.product.id === product.id);
       if (exists) {
         return prev.map((i) =>
           i.product.id === product.id
-            ? { ...i, qty: Math.min(i.qty + 1, product.stock || 99) }
+            ? { ...i, qty: Math.min(i.qty + quantityToAdd, product.stock || 99) }
             : i
         );
       }
-      return [...prev, { product, qty: 1 }];
+      return [...prev, { product, qty: Math.min(quantityToAdd, product.stock || 99) }];
     });
+    showToast(`"${product.name}" adicionado à sacola!`);
   };
 
   const updateQty = (id: string, delta: number) => {
@@ -183,26 +302,57 @@ export default function TenantStorePage() {
   };
 
   const totalItems = cart.reduce((acc, i) => acc + i.qty, 0);
-  const totalPrice = cart.reduce((acc, i) => acc + i.product.price * i.qty, 0);
+  const subtotalPrice = cart.reduce((acc, i) => acc + i.product.price * i.qty, 0);
+  const deliveryCost = deliveryType === "retirada" ? 0 : calculatedFreight;
+  const finalTotalPrice = subtotalPrice + deliveryCost;
 
-  const initials = store.name
-    .split(" ")
-    .slice(0, 2)
-    .map((w) => w[0])
-    .join("")
-    .toUpperCase();
+  const brandColor = store?.primary_color || "#059669";
 
+  const initials = store?.name
+    ? store.name
+        .split(" ")
+        .slice(0, 2)
+        .map((w) => w[0])
+        .join("")
+        .toUpperCase()
+    : "LF";
+
+  // Rolar suavemente até a categoria clicada
+  const scrollToCategory = (categoryName: string) => {
+    setActiveCategory(categoryName);
+    const element = document.getElementById(`cat-section-${categoryName}`);
+    if (element) {
+      const offset = 90;
+      const bodyRect = document.body.getBoundingClientRect().top;
+      const elementRect = element.getBoundingClientRect().top;
+      const elementPosition = elementRect - bodyRect;
+      const offsetPosition = elementPosition - offset;
+
+      window.scrollTo({
+        top: offsetPosition,
+        behavior: "smooth",
+      });
+    }
+  };
+
+  // Enviar pedido no WhatsApp
   const handleWhatsAppCheckout = () => {
     if (!isOpen) {
       alert("Esta loja está fechada no momento e não está aceitando novos pedidos.");
       return;
     }
     if (!customerName.trim()) {
-      alert("Informe seu nome para enviar o pedido.");
+      alert("Por favor, informe seu nome completo para o pedido.");
       return;
     }
-    if (deliveryType === "entrega" && !address.trim()) {
-      alert("Informe o endereço para entrega ou mude para Retirada.");
+    if (deliveryType === "entrega") {
+      if (!selectedNeighborhood && !addressStreet) {
+        alert("Por favor, selecione seu bairro ou digite seu endereço de entrega.");
+        return;
+      }
+    }
+    if (minOrder && subtotalPrice < minOrder) {
+      alert(`O pedido mínimo para entrega é de ${formatBRL(minOrder)}.`);
       return;
     }
 
@@ -213,51 +363,157 @@ export default function TenantStorePage() {
       )
       .join("\n");
 
+    const destinationAddress =
+      deliveryType === "retirada"
+        ? "🏬 Retirada no balcão da loja"
+        : `📍 Entrega: ${addressStreet || "Endereço"} ${addressNumber ? "nº " + addressNumber : ""} ${addressComp ? "(" + addressComp + ")" : ""} - Bairro: ${selectedNeighborhood || "Informado"}`;
+
     const lines = [
-      `🛍️ *Novo Pedido — ${store.name}*`,
+      `🛍️ *NOVO PEDIDO — ${store?.name || "Cardápio"}*`,
       ``,
       `👤 *Cliente:* ${customerName.trim()}`,
-      `📍 *Recebimento:* ${
-        deliveryType === "retirada" ? "Retirada na loja" : address.trim()
-      }`,
-      `💳 *Pagamento:* ${paymentMethod}`,
+      `🛵 *Modalidade:* ${deliveryType === "retirada" ? "RETIRADA NA LOJA" : "ENTREGA EM DOMICÍLIO"}`,
+      destinationAddress,
+      `💳 *Forma de Pagamento:* ${paymentMethod}`,
       ``,
-      `*Itens do pedido:*`,
+      `📋 *ITENS:*`,
       itemsText,
       ``,
-      `💰 *Total: ${formatBRL(totalPrice)}*`,
+      `Subtotal: ${formatBRL(subtotalPrice)}`,
+      deliveryType === "entrega" ? `Taxa de Entrega: ${formatBRL(deliveryCost)}` : `Frete: Grátis (Retirada)`,
+      `💰 *VALOR TOTAL: ${formatBRL(finalTotalPrice)}*`,
     ];
 
     if (notes.trim()) {
-      lines.push(``, `📝 *Obs:* ${notes.trim()}`);
+      lines.push(``, `📝 *Observações:* ${notes.trim()}`);
     }
 
-    const phone = store.whatsapp.startsWith("55")
-      ? store.whatsapp
-      : `55${store.whatsapp}`;
+    const phone = (store?.whatsapp || "").replace(/\D/g, "");
+    const formattedPhone = phone.startsWith("55") ? phone : `55${phone}`;
 
     window.open(
-      `https://wa.me/${phone}?text=${encodeURIComponent(lines.join("\n"))}`,
+      `https://wa.me/${formattedPhone}?text=${encodeURIComponent(lines.join("\n"))}`,
       "_blank"
     );
+
     setCart([]);
     setCartOpen(false);
+    showToast("Pedido gerado com sucesso! Redirecionando para o WhatsApp...");
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] pb-24">
+        <div className="h-44 bg-slate-200 animate-pulse rounded-b-[2.5rem]" />
+        <div className="max-w-2xl mx-auto px-4 -mt-10 space-y-4">
+          <div className="h-40 bg-white rounded-3xl shadow-sm animate-pulse" />
+          <div className="h-12 bg-white rounded-2xl shadow-sm animate-pulse" />
+          <div className="grid grid-cols-2 gap-3">
+            {[1, 2, 3, 4].map((n) => (
+              <div key={n} className="h-40 bg-white rounded-3xl animate-pulse" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!store) {
+    return (
+      <div className="min-h-screen bg-[#F8FAFC] flex flex-col items-center justify-center p-6 text-center">
+        <div className="w-16 h-16 bg-slate-100 rounded-2xl flex items-center justify-center mb-4 text-slate-400">
+          <StoreIcon className="w-8 h-8 stroke-[1.75]" />
+        </div>
+        <h1 className="text-xl font-black text-slate-900">Loja não encontrada</h1>
+        <p className="text-sm text-slate-500 mt-1">
+          Verifique o link ou entre em contato com o comerciante.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="min-h-screen bg-[#F8FAFC] text-slate-900 pb-32">
-      {/* Header da Vitrine com degradê e avatar da loja */}
-      <header
-        style={{
-          background: `linear-gradient(135deg, #090D16 0%, #0F172A 55%, ${brandColor} 145%)`,
-        }}
-        className="relative text-white pt-8 pb-14 px-5 sm:px-8 rounded-b-[2.5rem] shadow-xl overflow-hidden"
-      >
-        <div className="absolute top-0 right-10 w-64 h-64 bg-white/5 rounded-full blur-3xl pointer-events-none" />
-        <div className="relative max-w-3xl mx-auto flex items-center gap-4">
+    <div
+      className={`min-h-screen transition-colors duration-200 ${
+        isDark ? "bg-[#0B0F19] text-slate-100" : "bg-[#F8FAFC] text-slate-900"
+      } pb-36 font-sans`}
+    >
+      {/* Toast flutuante de confirmação */}
+      {toastMessage && (
+        <div className="fixed top-5 inset-x-4 z-50 flex justify-center pointer-events-none">
+          <div className="bg-slate-900 text-white text-xs sm:text-sm font-bold px-4 py-2.5 rounded-full shadow-2xl flex items-center gap-2 border border-slate-700/80 animate-in fade-in slide-in-from-top-4 duration-200 pointer-events-auto">
+            <Sparkles className="w-4 h-4 text-amber-400" />
+            <span>{toastMessage}</span>
+          </div>
+        </div>
+      )}
+
+      {/* 1. BARRA SUPERIOR (Botões Circulares) */}
+      <header className="sticky top-0 z-30 pt-3 pb-2 px-4 sm:px-6 backdrop-blur-md bg-white/70 dark:bg-slate-950/70 border-b border-slate-100 dark:border-slate-800 transition-colors">
+        <div className="max-w-2xl mx-auto flex items-center justify-between gap-2">
+          {/* Botão circular de voltar à esquerda */}
+          <button
+            onClick={() => {
+              if (window.history.length > 1) {
+                router.back();
+              } else {
+                router.push("/");
+              }
+            }}
+            aria-label="Voltar"
+            className="w-10 h-10 rounded-full bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition-all"
+          >
+            <ArrowLeft className="w-5 h-5 stroke-[2]" />
+          </button>
+
+          {/* Ações à direita: Chip de tempo, Tema e Perfil */}
+          <div className="flex items-center gap-2">
+            {/* Chip de tempo estimado */}
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 text-xs font-bold text-slate-700 dark:text-slate-300 shadow-xs">
+              <Clock className="w-3.5 h-3.5 text-slate-400" />
+              <span>{deliveryTime}</span>
+            </div>
+
+            {/* Alternador de tema Claro / Escuro */}
+            <button
+              onClick={() => setIsDark((prev) => !prev)}
+              aria-label="Alternar tema"
+              className="w-10 h-10 rounded-full bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition-all"
+            >
+              {isDark ? (
+                <Sun className="w-4 h-4 text-amber-400 stroke-[2]" />
+              ) : (
+                <Moon className="w-4 h-4 text-slate-600 stroke-[2]" />
+              )}
+            </button>
+
+            {/* Botão de Perfil / Conta */}
+            <button
+              onClick={() => setCartOpen(true)}
+              aria-label="Minha Conta e Pedidos"
+              className="w-10 h-10 rounded-full bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 shadow-xs flex items-center justify-center text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800 active:scale-95 transition-all relative"
+            >
+              <User className="w-4 h-4 stroke-[2]" />
+              {totalItems > 0 && (
+                <span
+                  style={{ backgroundColor: brandColor }}
+                  className="absolute -top-1 -right-1 w-4 h-4 rounded-full text-white text-[9px] font-black flex items-center justify-center shadow-xs"
+                >
+                  {totalItems}
+                </span>
+              )}
+            </button>
+          </div>
+        </div>
+      </header>
+
+      {/* 2. CARD DE CABEÇALHO DA LOJA */}
+      <section className="max-w-2xl mx-auto px-4 mt-10">
+        <div className="bg-white dark:bg-slate-900 rounded-[28px] p-5 sm:p-6 shadow-md shadow-slate-200/50 dark:shadow-none border border-slate-100 dark:border-slate-800 relative">
+          {/* Logo quadrada arredondada sobreposta ao canto superior esquerdo */}
           <div
-            style={{ backgroundColor: brandColor }}
-            className="w-16 h-16 sm:w-20 sm:h-20 rounded-3xl text-white font-extrabold text-xl sm:text-2xl flex items-center justify-center shadow-xl shadow-black/20 shrink-0 overflow-hidden ring-2 ring-white/20"
+            style={{ borderColor: brandColor }}
+            className="absolute -top-7 left-5 sm:left-6 w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-white dark:bg-slate-900 shadow-lg border-2 flex items-center justify-center overflow-hidden ring-4 ring-white dark:ring-slate-900"
           >
             {store.logo_url ? (
               <img
@@ -266,113 +522,202 @@ export default function TenantStorePage() {
                 className="w-full h-full object-cover"
               />
             ) : (
-              initials
+              <span
+                style={{ color: brandColor }}
+                className="font-black text-2xl tracking-tighter"
+              >
+                {initials}
+              </span>
             )}
           </div>
-          <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h1 className="text-xl sm:text-2xl font-extrabold tracking-tight truncate text-white">
-                {store.name}
-              </h1>
-              <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" />
+
+          {/* Indicador de Status Aberto / Fechado (Alinhado à direita no topo) */}
+          <div className="flex justify-end items-center mb-3">
+            {isOpen ? (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-widest text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/50 px-2.5 py-1 rounded-full border border-emerald-200/60 dark:border-emerald-800/50">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                Aberto Agora
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1.5 text-[11px] font-extrabold uppercase tracking-widest text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/50 px-2.5 py-1 rounded-full border border-rose-200/60 dark:border-rose-800/50">
+                <span className="w-2 h-2 rounded-full bg-rose-500" />
+                Fechado
+              </span>
+            )}
+          </div>
+
+          {/* Nome da Loja em destaque */}
+          <div className="mt-4">
+            <h1 className="text-2xl sm:text-3xl font-black tracking-tight text-slate-900 dark:text-white uppercase">
+              {store.name}
+            </h1>
+          </div>
+
+          {/* Linha de Chips Informativos */}
+          <div className="flex flex-wrap items-center gap-2 mt-3 text-xs font-semibold text-slate-600 dark:text-slate-300">
+            {/* Tempo */}
+            <div className="inline-flex items-center gap-1 bg-slate-50 dark:bg-slate-800/80 px-2.5 py-1 rounded-full border border-slate-200/70 dark:border-slate-700/60">
+              <Clock className="w-3.5 h-3.5 text-slate-400" />
+              <span>{deliveryTime}</span>
             </div>
-            <div className="flex flex-wrap items-center gap-2 mt-2">
-              {isOpen ? (
-                <span className="inline-flex items-center gap-1.5 text-xs bg-white/10 backdrop-blur-md px-3 py-1 rounded-full text-emerald-300 font-bold border border-white/10 shadow-xs">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                  Aberto agora
-                </span>
-              ) : (
-                <span className="inline-flex items-center gap-1.5 text-xs bg-rose-500/25 backdrop-blur-md px-3 py-1 rounded-full text-rose-300 font-bold border border-rose-400/30 shadow-xs">
-                  <span className="w-2 h-2 rounded-full bg-rose-400" />
-                  Fechado no momento
-                </span>
-              )}
-              <span className="inline-flex items-center gap-1.5 text-xs bg-amber-400/20 text-amber-300 px-3 py-1 rounded-full font-bold border border-amber-400/30 shadow-xs">
-                📒 Aceita Fiado
+
+            {/* Taxa a partir de */}
+            <div className="inline-flex items-center gap-1 bg-slate-50 dark:bg-slate-800/80 px-2.5 py-1 rounded-full border border-slate-200/70 dark:border-slate-700/60">
+              <Bike className="w-3.5 h-3.5 text-slate-400" />
+              <span>
+                {startingDeliveryFee !== null
+                  ? `A partir de ${formatBRL(startingDeliveryFee)}`
+                  : "Frete a calcular"}
               </span>
             </div>
+
+            {/* Pedido mínimo */}
+            {minOrder > 0 && (
+              <div className="inline-flex items-center gap-1 bg-slate-50 dark:bg-slate-800/80 px-2.5 py-1 rounded-full border border-slate-200/70 dark:border-slate-700/60">
+                <span>Mín {formatBRL(minOrder)}</span>
+              </div>
+            )}
+
+            {/* Botão Reservar (Pill destacado) */}
+            <button
+              onClick={() => setReserveModalOpen(true)}
+              className="inline-flex items-center gap-1 bg-amber-50 dark:bg-amber-950/60 text-amber-700 dark:text-amber-400 px-3 py-1 rounded-full border border-amber-200 dark:border-amber-800/70 font-bold active:scale-95 transition-all ml-auto hover:bg-amber-100"
+            >
+              <Calendar className="w-3.5 h-3.5" />
+              <span>Reservar</span>
+            </button>
+          </div>
+
+          {/* Seletor Segmentado: ENTREGA x RETIRADA */}
+          <div className="w-full bg-slate-100 dark:bg-slate-800/90 p-1.5 rounded-2xl flex gap-1.5 mt-5">
+            <button
+              onClick={() => setDeliveryType("entrega")}
+              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all duration-150 ${
+                deliveryType === "entrega"
+                  ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm shadow-slate-300/40"
+                  : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+              }`}
+            >
+              <Bike className="w-4 h-4 stroke-[2]" />
+              <span>Entrega</span>
+            </button>
+
+            <button
+              onClick={() => setDeliveryType("retirada")}
+              className={`flex-1 py-2.5 px-3 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-2 transition-all duration-150 ${
+                deliveryType === "retirada"
+                  ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm shadow-slate-300/40"
+                  : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-200"
+              }`}
+            >
+              <StoreIcon className="w-4 h-4 stroke-[2]" />
+              <span>Retirada</span>
+            </button>
           </div>
         </div>
-      </header>
+      </section>
 
-      {/* Banner se a loja estiver fechada */}
-      {!isOpen && (
-        <div className="max-w-3xl mx-auto px-4 mt-4">
-          <div className="bg-amber-50 border border-amber-200/90 text-amber-900 p-4 rounded-2xl flex items-center gap-3 text-xs sm:text-sm font-medium shadow-xs">
-            <span className="text-xl">🌙</span>
-            <div>
-              <strong className="block font-bold">Loja Fechada no Momento</strong>
-              <span className="text-slate-600">
-                Você pode navegar pelo catálogo e ver os preços, mas novos pedidos estão temporariamente pausados.
-              </span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Barra de Busca com Sombra Suave e Focus Ring */}
-      <div className="max-w-3xl mx-auto px-4 -mt-6">
-        <div className="relative bg-white rounded-2xl shadow-md shadow-slate-200/70 border border-slate-200/80 focus-within:ring-4 focus-within:ring-emerald-500/10 focus-within:border-emerald-500 transition-all">
-          <Search className="w-5 h-5 text-slate-400 absolute left-4 top-1/2 -translate-y-1/2 stroke-[2]" />
+      {/* 3. BARRA DE BUSCA */}
+      <section className="max-w-2xl mx-auto px-4 mt-5">
+        <div className="relative bg-white dark:bg-slate-900 rounded-2xl shadow-sm shadow-slate-200/50 dark:shadow-none border border-slate-200/80 dark:border-slate-800 focus-within:ring-4 focus-within:ring-emerald-500/10 focus-within:border-emerald-500 transition-all flex items-center">
+          <Search className="w-4 h-4 text-slate-400 absolute left-4 pointer-events-none stroke-[2]" />
           <input
             type="text"
-            placeholder="O que você procura hoje?"
+            placeholder="Você está com fome de quê?"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="w-full pl-11 pr-4 py-3.5 bg-transparent rounded-2xl text-sm font-semibold text-slate-900 placeholder:text-slate-400 focus:outline-none"
+            className="w-full pl-11 pr-10 py-3.5 bg-transparent rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
           />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-3 p-1 rounded-full text-slate-400 hover:text-slate-600"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          )}
         </div>
-      </div>
+      </section>
 
-      {/* Pílulas de Categoria com Microinteração */}
-      <div className="max-w-3xl mx-auto px-4 mt-5">
-        <div className="flex gap-2 overflow-x-auto pb-1.5 [&::-webkit-scrollbar]:hidden">
-          {categories.map((cat) => {
-            const active = selectedCategory === cat;
-            return (
-              <button
-                key={cat}
-                onClick={() => setSelectedCategory(cat)}
-                className={`px-4 py-2 rounded-2xl text-xs font-extrabold whitespace-nowrap transition-all duration-150 active:scale-95 ${
-                  active
-                    ? "bg-slate-900 text-white shadow-md shadow-slate-900/20"
-                    : "bg-white text-slate-600 border border-slate-200/80 hover:bg-slate-50 hover:border-slate-300 shadow-xs"
-                }`}
-              >
-                {cat}
-              </button>
-            );
-          })}
-        </div>
-      </div>
+      {/* 4. "EXPLORE O CARDÁPIO" (Carrossel Horizontal de Categorias) */}
+      {categories.length > 0 && (
+        <section className="max-w-2xl mx-auto px-4 mt-6">
+          <h2 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider mb-3">
+            Explore o cardápio
+          </h2>
 
-      {/* Grid de Produtos com Cards Modernos */}
-      <main className="max-w-3xl mx-auto px-4 mt-5">
-        {filteredProducts.length === 0 ? (
-          <div className="bg-white rounded-[32px] p-12 text-center border border-slate-200/70 shadow-sm shadow-slate-200/40">
-            <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-3 text-slate-400">
-              <Package className="w-7 h-7 stroke-[1.75]" />
-            </div>
-            <p className="text-sm font-extrabold text-slate-800">
-              Nenhum produto encontrado.
-            </p>
-            <p className="text-xs text-slate-400 mt-1">
-              Tente buscar com outro termo ou selecionar outra categoria.
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3.5 sm:gap-4">
-            {filteredProducts.map((p) => {
-              const qty = getQty(p.id);
-              const outOfStock = p.stock <= 0;
+          <div className="flex gap-2.5 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-none snap-x">
+            {categories.map((cat) => {
+              const iconInfo = getCategoryIcon(cat, categoryIconsMap[cat]);
+              const IconComponent = iconInfo.icon;
+              const isSelected = activeCategory === cat;
 
               return (
-                <div
-                  key={p.id}
-                  className="group bg-white rounded-[28px] border border-slate-200/70 shadow-sm shadow-slate-200/50 hover:shadow-xl hover:shadow-slate-300/40 hover:-translate-y-1 hover:border-emerald-200/80 transition-all duration-200 overflow-hidden flex flex-col"
+                <button
+                  key={cat}
+                  onClick={() => scrollToCategory(cat)}
+                  className={`snap-start min-w-[82px] max-w-[96px] bg-white dark:bg-slate-900 rounded-2xl p-2.5 flex flex-col items-center justify-center border transition-all duration-150 active:scale-95 shadow-xs ${
+                    isSelected
+                      ? "border-emerald-500 ring-2 ring-emerald-500/20 shadow-md"
+                      : "border-slate-200/70 dark:border-slate-800 hover:border-slate-300 hover:shadow-xs"
+                  }`}
                 >
-                  <div className="relative aspect-square bg-slate-50 flex items-center justify-center overflow-hidden">
+                  <div
+                    className={`w-11 h-11 rounded-xl ${iconInfo.bg} dark:bg-slate-800 flex items-center justify-center mb-1.5 shadow-xs`}
+                  >
+                    <IconComponent className={`w-5 h-5 ${iconInfo.color} stroke-[2]`} />
+                  </div>
+                  <span className="text-[10px] font-extrabold text-slate-700 dark:text-slate-300 uppercase tracking-tight truncate w-full text-center">
+                    {cat}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {/* 5. SEÇÃO "DESTAQUES" (Selo EM ALTA com ícone de fogo) */}
+      {featuredProducts.length > 0 && (
+        <section className="max-w-2xl mx-auto px-4 mt-6">
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/60 px-2 py-0.5 rounded-full border border-amber-200/80 dark:border-amber-800/60 mb-1">
+                <Flame className="w-3 h-3 text-amber-500 fill-amber-500" />
+                Em Alta
+              </span>
+              <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight flex items-center gap-1.5">
+                <span>Destaques</span>
+                <Flame className="w-4 h-4 text-amber-500 fill-amber-500" />
+              </h2>
+            </div>
+            <span className="text-xs font-bold text-slate-400">
+              {featuredProducts.length} {featuredProducts.length === 1 ? "item" : "itens"}
+            </span>
+          </div>
+
+          {/* Carrossel de Destaques */}
+          <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 scrollbar-none snap-x">
+            {featuredProducts.map((p) => {
+              return (
+                <div
+                  key={`feat-${p.id}`}
+                  onClick={() => {
+                    setSelectedProductDetails(p);
+                    setModalQty(1);
+                  }}
+                  className="snap-start min-w-[220px] sm:min-w-[240px] bg-white dark:bg-slate-900 rounded-3xl p-3.5 border border-slate-200/80 dark:border-slate-800 shadow-sm shadow-slate-200/50 dark:shadow-none hover:shadow-md transition-all cursor-pointer relative group flex flex-col justify-between"
+                >
+                  {/* Selo TOP com Estrela */}
+                  <div className="absolute top-4 right-4 z-10">
+                    <span className="inline-flex items-center gap-1 bg-amber-400 text-slate-900 text-[10px] font-black uppercase px-2 py-0.5 rounded-full shadow-xs">
+                      <Star className="w-3 h-3 fill-slate-900" />
+                      TOP
+                    </span>
+                  </div>
+
+                  {/* Foto do Destaque */}
+                  <div className="w-full aspect-[4/3] rounded-2xl bg-slate-100 dark:bg-slate-800 overflow-hidden relative mb-3">
                     {p.image_url ? (
                       <img
                         src={p.image_url}
@@ -380,112 +725,344 @@ export default function TenantStorePage() {
                         className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
                       />
                     ) : (
-                      <Package className="w-10 h-10 text-slate-300 stroke-[1.75]" />
-                    )}
-
-                    {outOfStock && (
-                      <div className="absolute inset-0 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center">
-                        <span className="bg-white text-slate-900 text-[11px] font-extrabold px-3 py-1 rounded-full shadow-md">
-                          Esgotado
+                      <div className="w-full h-full flex flex-col items-center justify-center p-3 text-center bg-slate-50 dark:bg-slate-800">
+                        <Package className="w-8 h-8 text-slate-300 stroke-[1.5] mb-1" />
+                        <span className="text-[10px] font-bold text-slate-400 line-clamp-1">
+                          {p.name}
                         </span>
                       </div>
                     )}
                   </div>
 
-                  <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between">
-                    <div>
-                      <h2 className="font-extrabold text-sm text-slate-900 leading-snug line-clamp-2 group-hover:text-emerald-700 transition-colors">
-                        {p.name}
-                      </h2>
-                      {p.description && (
-                        <p className="text-[11px] text-slate-400 mt-1 line-clamp-1 font-medium">
-                          {p.description}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="mt-3.5 flex items-center justify-between gap-2">
-                      <span className="font-extrabold text-base sm:text-lg text-slate-900 tracking-tight">
+                  <div>
+                    <h3 className="font-extrabold text-sm text-slate-900 dark:text-white line-clamp-1 group-hover:text-emerald-600 transition-colors">
+                      {p.name}
+                    </h3>
+                    <div className="flex items-center justify-between mt-2">
+                      <span className="font-black text-base text-slate-900 dark:text-white">
                         {formatBRL(p.price)}
                       </span>
 
-                      {qty === 0 ? (
-                        <button
-                          onClick={() => addToCart(p)}
-                          disabled={outOfStock}
-                          style={{
-                            backgroundColor: outOfStock ? undefined : brandColor,
-                          }}
-                          className="w-9 h-9 sm:w-10 sm:h-10 rounded-2xl text-white flex items-center justify-center hover:opacity-95 hover:scale-105 active:scale-90 transition-all disabled:bg-slate-200 disabled:text-slate-400 shrink-0 shadow-md shadow-black/10"
-                          aria-label="Adicionar"
-                        >
-                          <Plus className="w-5 h-5 stroke-[2.2]" />
-                        </button>
-                      ) : (
-                        <div className="flex items-center bg-slate-900 text-white rounded-2xl p-1 gap-1 shadow-md">
-                          <button
-                            onClick={() => updateQty(p.id, -1)}
-                            className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-white/20 active:scale-90 transition"
-                          >
-                            <Minus className="w-3.5 h-3.5 stroke-[2.2]" />
-                          </button>
-                          <span className="text-xs font-extrabold w-4 text-center">
-                            {qty}
-                          </span>
-                          <button
-                            onClick={() => addToCart(p)}
-                            className="w-7 h-7 flex items-center justify-center rounded-xl hover:bg-white/20 active:scale-90 transition"
-                          >
-                            <Plus className="w-3.5 h-3.5 stroke-[2.2]" />
-                          </button>
-                        </div>
-                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          addToCart(p);
+                        }}
+                        style={{ backgroundColor: brandColor }}
+                        className="w-8 h-8 rounded-full text-white flex items-center justify-center shadow-md active:scale-90 hover:scale-105 transition-transform"
+                        aria-label="Adicionar destaque"
+                      >
+                        <Plus className="w-4 h-4 stroke-[2.5]" />
+                      </button>
                     </div>
                   </div>
                 </div>
               );
             })}
           </div>
+        </section>
+      )}
+
+      {/* 6. LISTAS DE PRODUTOS POR CATEGORIA (Grade de 2 Colunas) */}
+      <main className="max-w-2xl mx-auto px-4 mt-8 space-y-8">
+        {filteredProducts.length === 0 ? (
+          <div className="bg-white dark:bg-slate-900 rounded-[28px] p-10 text-center border border-slate-200/70 dark:border-slate-800 shadow-sm">
+            <div className="w-14 h-14 rounded-2xl bg-slate-100 dark:bg-slate-800 flex items-center justify-center mx-auto mb-3 text-slate-400">
+              <Package className="w-7 h-7 stroke-[1.75]" />
+            </div>
+            <p className="text-sm font-extrabold text-slate-800 dark:text-slate-200">
+              Nenhum produto encontrado.
+            </p>
+            <p className="text-xs text-slate-400 mt-1">
+              Verifique o termo buscado ou limpe os filtros.
+            </p>
+          </div>
+        ) : (
+          categories.map((categoryName) => {
+            const categoryItems = groupedProducts.get(categoryName) || [];
+            if (categoryItems.length === 0) return null;
+
+            const catIcon = getCategoryIcon(categoryName, categoryIconsMap[categoryName]);
+            const CategoryIconComponent = catIcon.icon;
+
+            return (
+              <section
+                key={categoryName}
+                id={`cat-section-${categoryName}`}
+                className="scroll-mt-24"
+              >
+                {/* Cabeçalho da categoria com ícone, nome e contador à direita */}
+                <div className="flex items-center justify-between pb-3 border-b border-slate-200/80 dark:border-slate-800 mb-3.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">{catIcon.emoji}</span>
+                    <h2 className="text-sm sm:text-base font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                      {categoryName}
+                    </h2>
+                  </div>
+                  <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">
+                    {categoryItems.length}{" "}
+                    {categoryItems.length === 1 ? "ITEM" : "ITENS"}
+                  </span>
+                </div>
+
+                {/* Grade de 2 colunas no celular e tablet */}
+                <div className="grid grid-cols-2 gap-3 sm:gap-4">
+                  {categoryItems.map((p) => {
+                    const outOfStock = p.stock <= 0;
+
+                    return (
+                      <div
+                        key={p.id}
+                        onClick={() => {
+                          setSelectedProductDetails(p);
+                          setModalQty(1);
+                        }}
+                        className="group bg-white dark:bg-slate-900 rounded-3xl p-3 sm:p-3.5 border border-slate-200/80 dark:border-slate-800 shadow-sm shadow-slate-200/50 dark:shadow-none hover:shadow-md transition-all duration-200 flex flex-col justify-between cursor-pointer relative"
+                      >
+                        {/* Topo do Card: Nome do Produto */}
+                        <div className="min-h-[38px] mb-2 pr-1">
+                          <h3 className="font-extrabold text-xs sm:text-sm text-slate-900 dark:text-slate-100 line-clamp-2 leading-tight uppercase group-hover:text-emerald-600 transition-colors">
+                            {p.name}
+                          </h3>
+                        </div>
+
+                        {/* Base do Card: Preço à esquerda e Foto quadrada com botão '+' à direita */}
+                        <div className="flex items-end justify-between gap-2 mt-auto">
+                          {/* Preço */}
+                          <div className="min-w-0 pb-1">
+                            <span className="font-black text-xs sm:text-sm text-slate-900 dark:text-white tracking-tight block">
+                              {formatBRL(p.price)}
+                            </span>
+                          </div>
+
+                          {/* Foto quadrada arredondada com botão circular '+' sobreposto */}
+                          <div className="relative shrink-0">
+                            <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-slate-50 dark:bg-slate-800 overflow-hidden flex items-center justify-center border border-slate-100 dark:border-slate-800/80">
+                              {p.image_url ? (
+                                <img
+                                  src={p.image_url}
+                                  alt={p.name}
+                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                />
+                              ) : (
+                                <div className="p-2 text-center flex flex-col items-center justify-center">
+                                  <span className="text-[11px] font-black uppercase text-slate-400 line-clamp-2 leading-none">
+                                    {p.name}
+                                  </span>
+                                </div>
+                              )}
+
+                              {outOfStock && (
+                                <div className="absolute inset-0 bg-slate-900/70 backdrop-blur-xs flex items-center justify-center">
+                                  <span className="bg-white text-slate-900 text-[9px] font-black px-1.5 py-0.5 rounded-full">
+                                    Esgotado
+                                  </span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Botão circular '+' sobreposto ao canto inferior direito da foto */}
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (!outOfStock) addToCart(p);
+                              }}
+                              disabled={outOfStock}
+                              style={{
+                                backgroundColor: outOfStock ? "#CBD5E1" : brandColor,
+                              }}
+                              className="absolute -bottom-1 -right-1 w-7 h-7 sm:w-8 sm:h-8 rounded-full text-white flex items-center justify-center shadow-md active:scale-90 hover:scale-110 transition-transform disabled:cursor-not-allowed"
+                              aria-label={`Adicionar ${p.name}`}
+                            >
+                              <Plus className="w-4 h-4 stroke-[2.5]" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </section>
+            );
+          })
         )}
       </main>
 
-      {/* Botão Flutuante de Sacola (Dock Island) */}
+      {/* 7. BOTÃO FLUTUANTE DE SACOLA (Dock Island) */}
       {totalItems > 0 && (
-        <div className="fixed bottom-4 inset-x-4 z-40 max-w-lg mx-auto">
+        <div className="fixed bottom-4 inset-x-4 z-40 max-w-lg mx-auto animate-in slide-in-from-bottom-4 duration-200">
           <button
             onClick={() => setCartOpen(true)}
-            className="w-full bg-slate-900/95 hover:bg-slate-900 backdrop-blur-xl border border-slate-800 text-white px-5 py-4 rounded-[26px] shadow-2xl shadow-slate-900/30 flex items-center justify-between hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-150 ring-1 ring-black/10"
+            className="w-full bg-slate-900/95 dark:bg-slate-800/95 hover:bg-slate-900 backdrop-blur-xl border border-slate-800 text-white px-5 py-4 rounded-[26px] shadow-2xl shadow-slate-900/30 flex items-center justify-between hover:-translate-y-0.5 active:scale-[0.98] transition-all duration-150 ring-1 ring-white/10"
           >
             <div className="flex items-center gap-3.5">
               <div
                 style={{ backgroundColor: brandColor }}
-                className="relative text-white w-10 h-10 rounded-2xl flex items-center justify-center font-extrabold text-sm shadow-md"
+                className="relative text-white w-10 h-10 rounded-2xl flex items-center justify-center font-black text-sm shadow-md"
               >
                 {totalItems}
               </div>
               <div className="text-left">
-                <p className="text-sm font-extrabold leading-none">Ver sacola</p>
+                <p className="text-sm font-black leading-none">Ver sacola</p>
                 <p className="text-[11px] text-slate-400 mt-1 font-medium">
-                  Finalizar no WhatsApp
+                  {deliveryType === "retirada" ? "Retirada no balcão" : "Entrega em domicílio"}
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-1.5 font-extrabold text-base sm:text-lg">
-              {formatBRL(totalPrice)}
+            <div className="flex items-center gap-1.5 font-black text-base sm:text-lg">
+              {formatBRL(finalTotalPrice)}
               <ChevronRight className="w-5 h-5 text-white/80" />
             </div>
           </button>
         </div>
       )}
 
-      {cartOpen && (
-        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4">
-          <div className="bg-white w-full sm:max-w-lg max-h-[92vh] rounded-t-[36px] sm:rounded-[36px] flex flex-col overflow-hidden shadow-2xl border border-slate-100 ring-1 ring-black/5">
-            <div className="pt-3 pb-1 flex justify-center sm:hidden">
-              <div className="w-12 h-1 bg-slate-200 rounded-full" />
+      {/* 8. MODAL DE DETALHES DO PRODUTO */}
+      {selectedProductDetails && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-slate-900 w-full sm:max-w-md rounded-t-[32px] sm:rounded-[32px] overflow-hidden shadow-2xl border border-slate-100 dark:border-slate-800 ring-1 ring-black/10 flex flex-col max-h-[90vh]">
+            {/* Foto grande do Produto */}
+            <div className="relative aspect-[16/10] bg-slate-100 dark:bg-slate-800 flex items-center justify-center overflow-hidden">
+              {selectedProductDetails.image_url ? (
+                <img
+                  src={selectedProductDetails.image_url}
+                  alt={selectedProductDetails.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <div className="flex flex-col items-center justify-center text-slate-400 p-6">
+                  <Package className="w-12 h-12 stroke-[1.5] mb-2" />
+                  <span className="text-xs font-bold uppercase">{selectedProductDetails.name}</span>
+                </div>
+              )}
+
+              <button
+                onClick={() => setSelectedProductDetails(null)}
+                className="absolute top-3 right-3 w-9 h-9 rounded-full bg-black/50 text-white flex items-center justify-center hover:bg-black/70 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
             </div>
 
-            <div className="px-6 py-4 border-b border-slate-100 flex items-center justify-between">
+            <div className="p-5 sm:p-6 flex-1 overflow-y-auto space-y-4">
+              <div>
+                <span className="text-[11px] font-black uppercase tracking-wider text-slate-400">
+                  {selectedProductDetails.category || "Geral"}
+                </span>
+                <h3 className="text-xl font-black text-slate-900 dark:text-white mt-0.5">
+                  {selectedProductDetails.name}
+                </h3>
+                <p className="text-lg font-black text-slate-900 dark:text-emerald-400 mt-1">
+                  {formatBRL(selectedProductDetails.price)}
+                </p>
+              </div>
+
+              {selectedProductDetails.description && (
+                <p className="text-sm text-slate-600 dark:text-slate-300 leading-relaxed font-medium bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800">
+                  {selectedProductDetails.description}
+                </p>
+              )}
+
+              {/* Seletor de Quantidade */}
+              <div className="flex items-center justify-between pt-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                  Quantidade
+                </span>
+                <div className="flex items-center bg-slate-100 dark:bg-slate-800 rounded-2xl p-1 gap-2">
+                  <button
+                    onClick={() => setModalQty((q) => Math.max(1, q - 1))}
+                    className="w-8 h-8 rounded-xl bg-white dark:bg-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 active:scale-95 shadow-xs"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                  <span className="font-black text-sm w-6 text-center text-slate-900 dark:text-white">
+                    {modalQty}
+                  </span>
+                  <button
+                    onClick={() => setModalQty((q) => Math.min(selectedProductDetails.stock || 99, q + 1))}
+                    className="w-8 h-8 rounded-xl bg-white dark:bg-slate-700 flex items-center justify-center text-slate-700 dark:text-slate-200 active:scale-95 shadow-xs"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900">
+              <button
+                onClick={() => {
+                  addToCart(selectedProductDetails, modalQty);
+                  setSelectedProductDetails(null);
+                }}
+                disabled={selectedProductDetails.stock <= 0}
+                style={{
+                  backgroundColor:
+                    selectedProductDetails.stock <= 0 ? "#CBD5E1" : brandColor,
+                }}
+                className="w-full text-white py-4 rounded-2xl font-black text-sm flex items-center justify-center gap-2 shadow-lg shadow-black/15 active:scale-[0.98] transition-all"
+              >
+                <Plus className="w-5 h-5 stroke-[2.5]" />
+                <span>
+                  Adicionar • {formatBRL(selectedProductDetails.price * modalQty)}
+                </span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 9. MODAL DE RESERVA */}
+      {reserveModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white dark:bg-slate-900 w-full max-w-sm rounded-3xl p-6 shadow-2xl border border-slate-100 dark:border-slate-800 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-5 h-5 text-amber-500" />
+                <h3 className="font-black text-lg text-slate-900 dark:text-white">
+                  Reservar na Loja
+                </h3>
+              </div>
+              <button
+                onClick={() => setReserveModalOpen(false)}
+                className="p-1 rounded-full text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <p className="text-xs text-slate-600 dark:text-slate-300">
+              Deseja reservar mesa ou separar produtos para retirada agendada? Fale direto no WhatsApp do estabelecimento:
+            </p>
+            <button
+              onClick={() => {
+                const phone = (store.whatsapp || "").replace(/\D/g, "");
+                const formattedPhone = phone.startsWith("55") ? phone : `55${phone}`;
+                window.open(
+                  `https://wa.me/${formattedPhone}?text=${encodeURIComponent(
+                    `Olá! Gostaria de fazer uma reserva/agendamento no estabelecimento ${store.name}.`
+                  )}`,
+                  "_blank"
+                );
+                setReserveModalOpen(false);
+              }}
+              style={{ backgroundColor: brandColor }}
+              className="w-full text-white py-3 rounded-2xl font-black text-sm flex items-center justify-center gap-2 shadow-md active:scale-95"
+            >
+              <MessageCircle className="w-4 h-4" />
+              <span>Chamar no WhatsApp</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 10. GAVETA DO CARRINHO (CHECKOUT) */}
+      {cartOpen && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-200">
+          <div className="bg-white dark:bg-slate-900 w-full sm:max-w-lg max-h-[92vh] rounded-t-[36px] sm:rounded-[36px] flex flex-col overflow-hidden shadow-2xl border border-slate-100 dark:border-slate-800 ring-1 ring-black/10">
+            <div className="pt-3 pb-1 flex justify-center sm:hidden">
+              <div className="w-12 h-1 bg-slate-200 dark:bg-slate-700 rounded-full" />
+            </div>
+
+            <div className="px-6 py-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div
                   style={{ backgroundColor: `${brandColor}20`, color: brandColor }}
@@ -494,13 +1071,17 @@ export default function TenantStorePage() {
                   <ShoppingBag className="w-5 h-5 stroke-[2]" />
                 </div>
                 <div>
-                  <h2 className="font-extrabold text-lg text-slate-900 leading-none">Sua Sacola</h2>
-                  <p className="text-xs text-slate-400 font-medium mt-1">Revise seus itens e finalize</p>
+                  <h2 className="font-black text-lg text-slate-900 dark:text-white leading-none">
+                    Sua Sacola
+                  </h2>
+                  <p className="text-xs text-slate-400 font-medium mt-1">
+                    Revise seus itens e finalize o pedido
+                  </p>
                 </div>
               </div>
               <button
                 onClick={() => setCartOpen(false)}
-                className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 active:scale-95 rounded-full transition"
+                className="p-2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 rounded-full transition"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -509,46 +1090,81 @@ export default function TenantStorePage() {
             <div className="flex-1 overflow-y-auto p-5 sm:p-6 space-y-5">
               {/* Lista de Itens no Carrinho */}
               <div className="space-y-2.5">
-                {cart.map(({ product, qty }) => (
-                  <div
-                    key={product.id}
-                    className="flex items-center justify-between bg-slate-50 border border-slate-100 p-3.5 rounded-2xl shadow-xs"
+                {cart.length === 0 ? (
+                  <p className="text-center text-xs text-slate-400 py-6 font-semibold">
+                    Sua sacola está vazia. Adicione itens para continuar!
+                  </p>
+                ) : (
+                  cart.map(({ product, qty }) => (
+                    <div
+                      key={product.id}
+                      className="flex items-center justify-between bg-slate-50 dark:bg-slate-800/60 border border-slate-100 dark:border-slate-800 p-3.5 rounded-2xl shadow-xs"
+                    >
+                      <div className="min-w-0 pr-3">
+                        <p className="font-extrabold text-sm text-slate-900 dark:text-slate-100 truncate">
+                          {product.name}
+                        </p>
+                        <p
+                          style={{ color: brandColor }}
+                          className="text-xs font-black mt-0.5"
+                        >
+                          {formatBRL(product.price * qty)}
+                        </p>
+                      </div>
+                      <div className="flex items-center bg-white dark:bg-slate-700 border border-slate-200/80 dark:border-slate-600 rounded-xl p-0.5 gap-1 shadow-xs">
+                        <button
+                          onClick={() => updateQty(product.id, -1)}
+                          className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 active:scale-90 transition"
+                        >
+                          <Minus className="w-3.5 h-3.5 stroke-[2]" />
+                        </button>
+                        <span className="text-xs font-black w-5 text-center text-slate-900 dark:text-white">
+                          {qty}
+                        </span>
+                        <button
+                          onClick={() => addToCart(product)}
+                          className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-100 dark:hover:bg-slate-600 text-slate-700 dark:text-slate-200 active:scale-90 transition"
+                        >
+                          <Plus className="w-3.5 h-3.5 stroke-[2]" />
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Seletor Entrega x Retirada no Checkout */}
+              <div className="space-y-2">
+                <label className="text-xs font-black uppercase tracking-wider text-slate-400">
+                  Modalidade de Recebimento
+                </label>
+                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 dark:bg-slate-800 rounded-2xl">
+                  <button
+                    onClick={() => setDeliveryType("entrega")}
+                    className={`py-2.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
+                      deliveryType === "entrega"
+                        ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm"
+                        : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
+                    }`}
                   >
-                    <div className="min-w-0 pr-3">
-                      <p className="font-extrabold text-sm text-slate-900 truncate">
-                        {product.name}
-                      </p>
-                      <p
-                        style={{ color: brandColor }}
-                        className="text-xs font-extrabold mt-0.5"
-                      >
-                        {formatBRL(product.price * qty)}
-                      </p>
-                    </div>
-                    <div className="flex items-center bg-white border border-slate-200/80 rounded-xl p-0.5 gap-1 shadow-xs">
-                      <button
-                        onClick={() => updateQty(product.id, -1)}
-                        className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-700 active:scale-90 transition"
-                      >
-                        <Minus className="w-3.5 h-3.5 stroke-[2]" />
-                      </button>
-                      <span className="text-xs font-extrabold w-5 text-center text-slate-900">
-                        {qty}
-                      </span>
-                      <button
-                        onClick={() => addToCart(product)}
-                        className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-700 active:scale-90 transition"
-                      >
-                        <Plus className="w-3.5 h-3.5 stroke-[2]" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+                    <Bike className="w-3.5 h-3.5" /> Entrega
+                  </button>
+                  <button
+                    onClick={() => setDeliveryType("retirada")}
+                    className={`py-2.5 rounded-xl text-xs font-black uppercase tracking-wider flex items-center justify-center gap-1.5 transition-all ${
+                      deliveryType === "retirada"
+                        ? "bg-white dark:bg-slate-900 text-slate-900 dark:text-white shadow-sm"
+                        : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
+                    }`}
+                  >
+                    <StoreIcon className="w-3.5 h-3.5" /> Retirar na loja
+                  </button>
+                </div>
               </div>
 
               {/* Dados do Cliente */}
               <div className="space-y-1.5">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                <label className="text-xs font-black uppercase tracking-wider text-slate-400">
                   Seus dados
                 </label>
                 <input
@@ -556,49 +1172,69 @@ export default function TenantStorePage() {
                   placeholder="Seu nome completo *"
                   value={customerName}
                   onChange={(e) => setCustomerName(e.target.value)}
-                  className="w-full px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-sm font-semibold text-slate-900 placeholder:text-slate-400 shadow-xs focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none transition-all"
+                  className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 shadow-xs focus:bg-white dark:focus:bg-slate-800 focus:border-emerald-500 focus:outline-none transition-all"
                 />
               </div>
 
-              {/* Tipo de Entrega */}
-              <div className="space-y-2">
-                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-2xl">
-                  <button
-                    onClick={() => setDeliveryType("entrega")}
-                    className={`py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all ${
-                      deliveryType === "entrega"
-                        ? "bg-white text-slate-900 shadow-sm"
-                        : "text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    <MapPin className="w-3.5 h-3.5" /> Entrega
-                  </button>
-                  <button
-                    onClick={() => setDeliveryType("retirada")}
-                    className={`py-2.5 rounded-xl text-xs font-extrabold flex items-center justify-center gap-1.5 transition-all ${
-                      deliveryType === "retirada"
-                        ? "bg-white text-slate-900 shadow-sm"
-                        : "text-slate-500 hover:text-slate-800"
-                    }`}
-                  >
-                    <StoreIcon className="w-3.5 h-3.5" /> Retirar na loja
-                  </button>
-                </div>
+              {/* Endereço de Entrega (se for Entrega) */}
+              {deliveryType === "entrega" && (
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase tracking-wider text-slate-400">
+                    Endereço para entrega
+                  </label>
 
-                {deliveryType === "entrega" && (
+                  {/* Seleção de Bairro se houver bairros cadastrados */}
+                  {neighborhoods.filter((n) => n.active).length > 0 && (
+                    <select
+                      value={selectedNeighborhood}
+                      onChange={(e) => {
+                        setSelectedNeighborhood(e.target.value);
+                        const found = neighborhoods.find((n) => n.name === e.target.value);
+                        if (found) setCalculatedFreight(Number(found.fee));
+                      }}
+                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 dark:text-white focus:outline-none"
+                    >
+                      <option value="">Selecione seu bairro atendido *</option>
+                      {neighborhoods
+                        .filter((n) => n.active)
+                        .map((n) => (
+                          <option key={n.id} value={n.name}>
+                            {n.name} — Frete {formatBRL(n.fee)}
+                          </option>
+                        ))}
+                    </select>
+                  )}
+
                   <input
                     type="text"
-                    placeholder="Rua, número e bairro *"
-                    value={address}
-                    onChange={(e) => setAddress(e.target.value)}
-                    className="w-full px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-sm font-semibold text-slate-900 placeholder:text-slate-400 shadow-xs focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none transition-all"
+                    placeholder="Rua / Avenida *"
+                    value={addressStreet}
+                    onChange={(e) => setAddressStreet(e.target.value)}
+                    className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
                   />
-                )}
-              </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <input
+                      type="text"
+                      placeholder="Número *"
+                      value={addressNumber}
+                      onChange={(e) => setAddressNumber(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
+                    />
+                    <input
+                      type="text"
+                      placeholder="Complemento"
+                      value={addressComp}
+                      onChange={(e) => setAddressComp(e.target.value)}
+                      className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Forma de Pagamento */}
               <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-slate-400">
+                <label className="text-xs font-black uppercase tracking-wider text-slate-400">
                   Como vai pagar?
                 </label>
                 <div className="grid grid-cols-2 gap-2.5">
@@ -612,53 +1248,78 @@ export default function TenantStorePage() {
                         style={{
                           borderColor: selected ? brandColor : undefined,
                         }}
-                        className={`p-3.5 rounded-2xl border-2 text-left transition-all duration-150 hover:-translate-y-0.5 active:scale-[0.98] ${
+                        className={`p-3 rounded-2xl border-2 text-left transition-all duration-150 active:scale-[0.98] ${
                           selected
-                            ? "bg-slate-50 shadow-sm"
-                            : "border-slate-100 bg-slate-50/70 hover:border-slate-200 hover:bg-slate-50"
+                            ? "bg-slate-50 dark:bg-slate-800 shadow-sm"
+                            : "border-slate-100 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-800/40"
                         }`}
                       >
                         <div className="flex items-center justify-between">
                           <Icon
                             style={{ color: selected ? brandColor : undefined }}
-                            className={`w-5 h-5 stroke-[2] ${selected ? "" : "text-slate-400"}`}
+                            className={`w-5 h-5 stroke-[2] ${
+                              selected ? "" : "text-slate-400"
+                            }`}
                           />
                           {opt.highlight && (
-                            <span className="text-[10px] font-extrabold bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full border border-amber-200">
+                            <span className="text-[9px] font-black bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300 px-2 py-0.5 rounded-full border border-amber-200">
                               Popular
                             </span>
                           )}
                         </div>
-                        <p className="font-extrabold text-sm text-slate-900 mt-2">{opt.label}</p>
-                        <p className="text-[11px] text-slate-500 font-medium">{opt.desc}</p>
+                        <p className="font-black text-xs sm:text-sm text-slate-900 dark:text-white mt-1.5">
+                          {opt.label}
+                        </p>
+                        <p className="text-[10px] text-slate-400 font-medium">{opt.desc}</p>
                       </button>
                     );
                   })}
                 </div>
               </div>
 
+              {/* Observações */}
               <textarea
-                placeholder="Alguma observação? (tamanho, cor, troco...)"
+                placeholder="Observações do pedido (ex: sem cebola, ponto da carne, troco para 50...)"
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
                 rows={2}
-                className="w-full px-4 py-3 bg-slate-50 border border-slate-200/80 rounded-2xl text-sm font-semibold text-slate-900 placeholder:text-slate-400 shadow-xs focus:bg-white focus:border-emerald-500 focus:ring-4 focus:ring-emerald-500/10 focus:outline-none transition-all"
+                className="w-full px-4 py-3 bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 rounded-2xl text-xs sm:text-sm font-semibold text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none"
               />
+
+              {/* Resumo de Valores */}
+              <div className="bg-slate-50 dark:bg-slate-800/50 p-3.5 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-1 text-xs">
+                <div className="flex justify-between text-slate-500">
+                  <span>Subtotal</span>
+                  <span className="font-bold">{formatBRL(subtotalPrice)}</span>
+                </div>
+                <div className="flex justify-between text-slate-500">
+                  <span>Frete</span>
+                  <span className="font-bold">
+                    {deliveryType === "retirada"
+                      ? "Grátis (Retirada)"
+                      : formatBRL(deliveryCost)}
+                  </span>
+                </div>
+                <div className="flex justify-between text-sm font-black text-slate-900 dark:text-white pt-1 border-t border-slate-200 dark:border-slate-700">
+                  <span>Total</span>
+                  <span style={{ color: brandColor }}>{formatBRL(finalTotalPrice)}</span>
+                </div>
+              </div>
             </div>
 
-            <div className="p-5 sm:p-6 border-t border-slate-100 bg-white shadow-lg">
+            <div className="p-4 sm:p-5 border-t border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 shadow-lg">
               <button
                 onClick={handleWhatsAppCheckout}
-                disabled={!isOpen}
+                disabled={!isOpen || cart.length === 0}
                 style={{ backgroundColor: isOpen ? brandColor : "#94A3B8" }}
-                className={`w-full hover:opacity-95 hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98] text-white py-4 px-4 rounded-2xl font-extrabold text-sm sm:text-base shadow-lg shadow-black/15 flex items-center justify-center gap-2.5 transition-all duration-150 ${
-                  !isOpen ? "cursor-not-allowed opacity-60 shadow-none" : ""
+                className={`w-full hover:opacity-95 hover:shadow-xl active:scale-[0.98] text-white py-4 px-4 rounded-2xl font-black text-sm sm:text-base shadow-lg shadow-black/15 flex items-center justify-center gap-2.5 transition-all duration-150 ${
+                  !isOpen || cart.length === 0 ? "cursor-not-allowed opacity-60 shadow-none" : ""
                 }`}
               >
                 <MessageCircle className="w-5 h-5 stroke-[2]" />
                 <span>
                   {isOpen
-                    ? `Enviar pedido no Zap • ${formatBRL(totalPrice)}`
+                    ? `Enviar pedido no Zap • ${formatBRL(finalTotalPrice)}`
                     : "Loja Fechada no Momento"}
                 </span>
               </button>
@@ -667,13 +1328,13 @@ export default function TenantStorePage() {
         </div>
       )}
 
-      {/* Rodapé com Mascote */}
-      <footer className="py-10 text-center text-xs text-slate-400 flex flex-col sm:flex-row items-center justify-center gap-2">
+      {/* RODAPÉ */}
+      <footer className="py-12 text-center text-xs text-slate-400 flex flex-col sm:flex-row items-center justify-center gap-2">
         <div className="flex items-center gap-2">
           <span>Tecnologia oficial</span>
           <img src="/logo.png" alt="meufiadim" className="h-6 w-auto inline-block" />
         </div>
-        <span className="hidden sm:inline text-slate-300">•</span>
+        <span className="hidden sm:inline text-slate-300 dark:text-slate-700">•</span>
         <span>Compre Agora, Pague Depois!</span>
       </footer>
     </div>
