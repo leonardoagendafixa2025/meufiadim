@@ -1428,53 +1428,6 @@ export default function AdminDashboardPage() {
               </button>
             </div>
 
-            {/* Status de Atendimento (Aberta / Fechada) */}
-            <div className="bg-white rounded-[32px] p-6 sm:p-7 border border-slate-200/70 shadow-sm shadow-slate-200/50 space-y-3.5">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-extrabold text-base text-slate-900">
-                    Horário & Status da Vitrine
-                  </h3>
-                  <p className="text-xs text-slate-500 mt-0.5 font-medium">
-                    Defina se a sua vitrine online está aberta ou fechada para receber pedidos
-                  </p>
-                </div>
-                <span
-                  className={`px-3 py-1 rounded-full text-xs font-extrabold border ${
-                    isOpen
-                      ? "bg-emerald-50 text-emerald-700 border-emerald-200"
-                      : "bg-rose-50 text-rose-700 border-rose-200"
-                  }`}
-                >
-                  {isOpen ? "🟢 Aberta" : "🔴 Fechada"}
-                </span>
-              </div>
-
-              <div className="p-4 bg-slate-50 rounded-2xl border border-slate-200/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-                <span className="text-slate-600 font-medium">
-                  {isOpen
-                    ? "Sua loja está ABERTA. Clientes conseguem montar o carrinho e enviar pedidos no WhatsApp."
-                    : "Sua loja está FECHADA. Clientes podem ver os preços, mas o botão de fazer pedido fica desativado."}
-                </span>
-                <button
-                  type="button"
-                  onClick={handleToggleOpen}
-                  disabled={togglingOpen}
-                  className={`px-4 py-2.5 rounded-xl font-extrabold text-xs transition active:scale-95 shrink-0 ${
-                    isOpen
-                      ? "bg-rose-600 hover:bg-rose-700 text-white shadow-sm shadow-rose-600/20"
-                      : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm shadow-emerald-600/20"
-                  }`}
-                >
-                  {togglingOpen
-                    ? "Salvando..."
-                    : isOpen
-                    ? "Pausar e Fechar Loja"
-                    : "Abrir Loja Agora"}
-                </button>
-              </div>
-            </div>
-
             {/* Aparência da Vitrine (Logo via Cloudinary + Cor) */}
             <form
               onSubmit={handleSaveTheme}
