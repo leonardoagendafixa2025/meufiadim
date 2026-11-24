@@ -30,6 +30,7 @@ import {
 import { supabase } from "@/lib/supabase";
 import { formatBRL } from "@/lib/whatsapp";
 import { uploadToCloudinary } from "@/lib/cloudinary";
+import { generatePixCopiaECola } from "@/lib/pix";
 
 interface Store {
   id: string;
@@ -114,6 +115,8 @@ export default function AdminDashboardPage() {
     customer: Customer;
     type: "compra" | "pagamento";
   } | null>(null);
+  const [chargeModal, setChargeModal] = useState<Customer | null>(null);
+  const [copiedPixCode, setCopiedPixCode] = useState(false);
 
   // Forms
   const [cName, setCName] = useState("");
@@ -394,6 +397,58 @@ export default function AdminDashboardPage() {
     } finally {
       setSendingId(null);
     }
+  };
+
+  const handleOpenMyWhatsApp = (customer: Customer) => {
+    if (!customer.phone) return;
+    const cleanPhone = customer.phone.replace(/\D/g, "");
+    const formattedPhone = cleanPhone.startsWith("55") ? cleanPhone : `55${cleanPhone}`;
+    const formattedBalance = formatBRL(customer.balance);
+    const formattedDate = customer.due_date
+      ? new Date(`${customer.due_date}T12:00:00`).toLocaleDateString("pt-BR")
+      : null;
+
+    let pixCode = "";
+    if (store?.pix_key) {
+      try {
+        pixCode = generatePixCopiaECola({
+          pixKey: store.pix_key,
+          merchantName: store.name || "MEUFIADIM",
+          merchantCity: store.pix_city || "BRASIL",
+          amount: Number(customer.balance),
+        });
+      } catch (e) {
+        console.warn("Erro ao gerar Pix:", e);
+      }
+    }
+
+    const lines = [
+      `Olá, ${customer.name}! Tudo bem?`,
+      `Passando para lembrar do seu fiado em aberto na *${store?.name || "nossa loja"}*:`,
+      ``,
+      `💰 *Valor em aberto:* ${formattedBalance}`,
+    ];
+
+    if (formattedDate) {
+      lines.push(`📅 *Data final de pagamento:* ${formattedDate}`);
+    }
+
+    if (pixCode) {
+      lines.push(
+        ``,
+        `🔑 *Chave Pix:* ${store?.pix_key}`,
+        ``,
+        `*Pix Copia e Cola:*`,
+        pixCode
+      );
+    } else if (store?.pix_key) {
+      lines.push(``, `🔑 *Chave Pix:* ${store.pix_key}`);
+    } else {
+      lines.push(``, `Quando puder fazer o acerto, é só me responder por aqui. Obrigado!`);
+    }
+
+    const url = `https://wa.me/${formattedPhone}?text=${encodeURIComponent(lines.join("\n"))}`;
+    window.open(url, "_blank");
   };
 
   const handleAddProduct = async (e: React.FormEvent) => {
@@ -792,12 +847,12 @@ export default function AdminDashboardPage() {
                           <span>Receber</span>
                         </button>
                         <button
-                          onClick={() => handleSendCharge(c)}
-                          disabled={c.balance <= 0 || sendingId === c.id}
+                          onClick={() => setChargeModal(c)}
+                          disabled={c.balance <= 0}
                           className="py-2.5 px-2.5 bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 disabled:from-slate-200 disabled:to-slate-200 disabled:text-slate-400 text-white rounded-2xl text-xs font-extrabold flex items-center justify-center gap-1.5 shadow-md shadow-emerald-600/25 hover:shadow-emerald-600/40 hover:-translate-y-0.5 active:scale-[0.97] transition-all duration-150 disabled:shadow-none disabled:pointer-events-none"
                         >
                           <MessageCircle className="w-3.5 h-3.5 stroke-[2]" />
-                          <span>{sendingId === c.id ? "Enviando..." : "Cobrar Zap"}</span>
+                          <span>Cobrar</span>
                         </button>
                       </div>
                     </div>
@@ -1514,6 +1569,146 @@ export default function AdminDashboardPage() {
               Salvar Produto
             </button>
           </form>
+        </div>
+      )}
+
+      {/* Modal: Opções de Cobrança do Cliente (Robô Oficial ou WhatsApp Próprio) */}
+      {chargeModal && (
+        <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in">
+          <div className="bg-white w-full sm:max-w-md rounded-t-[32px] sm:rounded-[32px] p-6 sm:p-7 shadow-2xl border border-slate-100 ring-1 ring-black/5 space-y-5 animate-in zoom-in-95">
+            <div className="flex justify-between items-start">
+              <div>
+                <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/60">
+                  Cobrar Fiado
+                </span>
+                <h3 className="font-extrabold text-lg text-slate-900 mt-1">
+                  {chargeModal.name}
+                </h3>
+                <p className="text-xs text-slate-500 font-medium">{chargeModal.phone}</p>
+              </div>
+              <button
+                onClick={() => setChargeModal(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Resumo da Dívida */}
+            <div className="bg-slate-50 rounded-2xl p-4 border border-slate-200/70 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-500 font-medium">Valor em aberto:</span>
+                <span className="text-xl font-extrabold text-emerald-600">
+                  {formatBRL(chargeModal.balance)}
+                </span>
+              </div>
+              {chargeModal.due_date && (
+                <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-200/60">
+                  <span className="text-slate-500 font-medium">Vencimento:</span>
+                  <span className="font-bold text-slate-800">
+                    {new Date(`${chargeModal.due_date}T12:00:00`).toLocaleDateString("pt-BR")}
+                  </span>
+                </div>
+              )}
+              {store.pix_key && (
+                <div className="flex items-center justify-between text-xs pt-1 border-t border-slate-200/60">
+                  <span className="text-slate-500 font-medium">Sua Chave Pix:</span>
+                  <span className="font-mono font-bold text-slate-800 truncate max-w-[180px]">
+                    {store.pix_key}
+                  </span>
+                </div>
+              )}
+            </div>
+
+            {/* Opções de Envio */}
+            <div className="space-y-2.5">
+              <span className="text-[11px] font-extrabold uppercase tracking-wider text-slate-400 block">
+                Escolha como deseja cobrar:
+              </span>
+
+              {/* Opção 1: Robô Central 24/7 */}
+              <button
+                type="button"
+                onClick={async () => {
+                  const cust = chargeModal;
+                  setChargeModal(null);
+                  await handleSendCharge(cust);
+                }}
+                disabled={sendingId === chargeModal.id}
+                className="w-full p-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white text-left transition-all shadow-md shadow-emerald-600/20 active:scale-[0.98] flex items-center justify-between gap-3 group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-white/20 flex items-center justify-center shrink-0">
+                    <Zap className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <strong className="block text-sm font-extrabold text-white">
+                      Disparo Automático (Robô Oficial)
+                    </strong>
+                    <span className="text-[11px] text-emerald-100 block">
+                      Envia em 2º plano sem você precisar abrir o celular
+                    </span>
+                  </div>
+                </div>
+                <ArrowUpRight className="w-4 h-4 text-emerald-200 group-hover:translate-x-0.5 group-hover:-translate-y-0.5 transition-transform" />
+              </button>
+
+              {/* Opção 2: Meu WhatsApp Próprio */}
+              <button
+                type="button"
+                onClick={() => {
+                  handleOpenMyWhatsApp(chargeModal);
+                  setChargeModal(null);
+                }}
+                className="w-full p-4 rounded-2xl bg-slate-50 hover:bg-slate-100 border border-slate-200 text-left transition-all active:scale-[0.98] flex items-center justify-between gap-3 group"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                    <Smartphone className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <strong className="block text-sm font-extrabold text-slate-900">
+                      Cobrar pelo Meu WhatsApp Próprio
+                    </strong>
+                    <span className="text-[11px] text-slate-500 block">
+                      Abre a conversa no seu aparelho com a mensagem pronta
+                    </span>
+                  </div>
+                </div>
+                <ExternalLink className="w-4 h-4 text-slate-400 group-hover:text-slate-600 transition-colors" />
+              </button>
+
+              {/* Opção 3: Copiar Código Pix Copia e Cola */}
+              {store.pix_key && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      const code = generatePixCopiaECola({
+                        pixKey: store.pix_key!,
+                        merchantName: store.name || "MEUFIADIM",
+                        merchantCity: store.pix_city || "BRASIL",
+                        amount: Number(chargeModal.balance),
+                      });
+                      navigator.clipboard.writeText(code);
+                      setCopiedPixCode(true);
+                      setTimeout(() => setCopiedPixCode(false), 3000);
+                    } catch (e: any) {
+                      alert("Erro ao gerar Pix Copia e Cola.");
+                    }
+                  }}
+                  className="w-full py-2.5 px-3 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition flex items-center justify-center gap-2"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>
+                    {copiedPixCode
+                      ? "Código Pix Copiado com Sucesso!"
+                      : "Copiar Pix Copia e Cola deste Cliente"}
+                  </span>
+                </button>
+              )}
+            </div>
+          </div>
         </div>
       )}
 
