@@ -65,6 +65,7 @@ export default function TenantStorePage() {
   const [address, setAddress] = useState("");
   const [paymentMethod, setPaymentMethod] = useState("Fiado");
   const [notes, setNotes] = useState("");
+  const [isOpen, setIsOpen] = useState(true);
 
   useEffect(() => {
     async function loadStore() {
@@ -82,6 +83,16 @@ export default function TenantStorePage() {
           .eq("store_id", storeData.id)
           .order("created_at", { ascending: false });
         setProducts(prodData || []);
+
+        // Consulta se a loja está aberta ou fechada para pedidos
+        fetch(`/api/store/status?slug=${slug}`)
+          .then((res) => res.json())
+          .then((data) => {
+            if (data && typeof data.is_open === "boolean") {
+              setIsOpen(data.is_open);
+            }
+          })
+          .catch(() => {});
       }
       setLoading(false);
     }
@@ -182,6 +193,10 @@ export default function TenantStorePage() {
     .toUpperCase();
 
   const handleWhatsAppCheckout = () => {
+    if (!isOpen) {
+      alert("Esta loja está fechada no momento e não está aceitando novos pedidos.");
+      return;
+    }
     if (!customerName.trim()) {
       alert("Informe seu nome para enviar o pedido.");
       return;
@@ -262,10 +277,17 @@ export default function TenantStorePage() {
               <ShieldCheck className="w-5 h-5 text-emerald-400 shrink-0" />
             </div>
             <div className="flex flex-wrap items-center gap-2 mt-2">
-              <span className="inline-flex items-center gap-1.5 text-xs bg-white/10 backdrop-blur-md px-3 py-1 rounded-full text-emerald-300 font-bold border border-white/10 shadow-xs">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                Aberto agora
-              </span>
+              {isOpen ? (
+                <span className="inline-flex items-center gap-1.5 text-xs bg-white/10 backdrop-blur-md px-3 py-1 rounded-full text-emerald-300 font-bold border border-white/10 shadow-xs">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                  Aberto agora
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5 text-xs bg-rose-500/25 backdrop-blur-md px-3 py-1 rounded-full text-rose-300 font-bold border border-rose-400/30 shadow-xs">
+                  <span className="w-2 h-2 rounded-full bg-rose-400" />
+                  Fechado no momento
+                </span>
+              )}
               <span className="inline-flex items-center gap-1.5 text-xs bg-amber-400/20 text-amber-300 px-3 py-1 rounded-full font-bold border border-amber-400/30 shadow-xs">
                 📒 Aceita Fiado
               </span>
@@ -273,6 +295,21 @@ export default function TenantStorePage() {
           </div>
         </div>
       </header>
+
+      {/* Banner se a loja estiver fechada */}
+      {!isOpen && (
+        <div className="max-w-3xl mx-auto px-4 mt-4">
+          <div className="bg-amber-50 border border-amber-200/90 text-amber-900 p-4 rounded-2xl flex items-center gap-3 text-xs sm:text-sm font-medium shadow-xs">
+            <span className="text-xl">🌙</span>
+            <div>
+              <strong className="block font-bold">Loja Fechada no Momento</strong>
+              <span className="text-slate-600">
+                Você pode navegar pelo catálogo e ver os preços, mas novos pedidos estão temporariamente pausados.
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Barra de Busca com Sombra Suave e Focus Ring */}
       <div className="max-w-3xl mx-auto px-4 -mt-6">
@@ -612,11 +649,18 @@ export default function TenantStorePage() {
             <div className="p-5 sm:p-6 border-t border-slate-100 bg-white shadow-lg">
               <button
                 onClick={handleWhatsAppCheckout}
-                style={{ backgroundColor: brandColor }}
-                className="w-full hover:opacity-95 hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98] text-white py-4 px-4 rounded-2xl font-extrabold text-sm sm:text-base shadow-lg shadow-black/15 flex items-center justify-center gap-2.5 transition-all duration-150"
+                disabled={!isOpen}
+                style={{ backgroundColor: isOpen ? brandColor : "#94A3B8" }}
+                className={`w-full hover:opacity-95 hover:shadow-xl hover:-translate-y-0.5 active:scale-[0.98] text-white py-4 px-4 rounded-2xl font-extrabold text-sm sm:text-base shadow-lg shadow-black/15 flex items-center justify-center gap-2.5 transition-all duration-150 ${
+                  !isOpen ? "cursor-not-allowed opacity-60 shadow-none" : ""
+                }`}
               >
                 <MessageCircle className="w-5 h-5 stroke-[2]" />
-                <span>Enviar pedido no Zap • {formatBRL(totalPrice)}</span>
+                <span>
+                  {isOpen
+                    ? `Enviar pedido no Zap • ${formatBRL(totalPrice)}`
+                    : "Loja Fechada no Momento"}
+                </span>
               </button>
             </div>
           </div>

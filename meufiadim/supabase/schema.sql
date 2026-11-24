@@ -16,8 +16,11 @@ CREATE TABLE IF NOT EXISTS public.stores (
   commission_rate NUMERIC(5,2) DEFAULT 5.00,
   billing_cycle TEXT CHECK (billing_cycle IN ('weekly', 'monthly')) DEFAULT 'weekly',
   status TEXT CHECK (status IN ('active', 'blocked')) DEFAULT 'active',
+  is_open BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE public.stores ADD COLUMN IF NOT EXISTS is_open BOOLEAN DEFAULT true;
 
 -- 2. Tabela: Produtos
 CREATE TABLE IF NOT EXISTS public.products (
