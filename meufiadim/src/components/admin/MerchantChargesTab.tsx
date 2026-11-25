@@ -360,7 +360,7 @@ export function MerchantChargesTab({
           Entre em contato com o suporte oficial do MEU FIADIM.
         </div>
         <a
-          href="https://wa.me/5531973149306?text=Ol%C3%A1!%20Preciso%20de%20ajuda%20sobre%20uma%20cobran%C3%A7a%20no%20MEU%20FIADIM."
+          href="https://wa.me/5531993305095?text=Ol%C3%A1!%20Preciso%20de%20ajuda%20sobre%20uma%20cobran%C3%A7a%20no%20MEU%20FIADIM."
           target="_blank"
           rel="noreferrer"
           className="px-4 py-2 rounded-xl bg-white border border-slate-200 hover:bg-slate-100 text-slate-800 font-extrabold text-xs inline-flex items-center gap-1.5 self-start sm:self-auto"

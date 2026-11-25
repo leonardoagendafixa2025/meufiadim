@@ -38,7 +38,7 @@ export async function GET(req: Request) {
       pix_key: meta.pix_key || "",
       pix_name: meta.pix_name || "MeuFiadim Plataforma",
       pix_city: meta.pix_city || "BRASILIA",
-      whatsapp: meta.whatsapp || "",
+      whatsapp: meta.whatsapp || "31993305095",
     });
   } catch (err: any) {
     return NextResponse.json({ error: err.message }, { status: 500 });

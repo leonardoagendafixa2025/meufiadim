@@ -39,7 +39,7 @@ export async function POST(req: Request) {
     const adminPixKey = meta.pix_key || process.env.ADMIN_PIX_KEY || "";
     const adminPixName = meta.pix_name || "MEUFIADIM";
     const adminPixCity = meta.pix_city || "BRASILIA";
-    const adminWhatsapp = meta.whatsapp || "";
+    const adminWhatsapp = meta.whatsapp || "31993305095";
 
     // 2. Se o SuperAdmin configurou a chave Pix direta, gera Pix Copia e Cola oficial do Banco Central
     if (adminPixKey) {
