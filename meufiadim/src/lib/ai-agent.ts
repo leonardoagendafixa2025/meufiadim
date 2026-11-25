@@ -505,7 +505,7 @@ export async function runAiAgent(params: {
   const openAiKey = (process.env.OPENAI_API_KEY || "").trim();
 
   let hadApiError = false;
-  let lastErrorDetail = "";
+  const attemptErrors: string[] = [];
 
   const sanitizeError = (err: unknown) => {
     const raw = err instanceof Error ? err.message : String(err || "");
@@ -513,7 +513,8 @@ export async function runAiAgent(params: {
       .replace(/AQ\.[A-Za-z0-9._-]+/g, "[KEY]")
       .replace(/AIza[A-Za-z0-9_-]+/g, "[KEY]")
       .replace(/key=[^&\s]+/gi, "key=[KEY]")
-      .slice(0, 220);
+      .replace(/\s+/g, " ")
+      .slice(0, 200);
   };
 
   if (geminiKey) {
@@ -539,41 +540,70 @@ export async function runAiAgent(params: {
         return { ...res, aiDiagnostic: "active" };
       } catch (err) {
         hadApiError = true;
-        lastErrorDetail = `${attempt.endpointBase}/${attempt.model}: ${sanitizeError(err)}`;
-        console.warn(`⚠️ Falha na chamada Gemini (${lastErrorDetail})`);
+        const msg = `${attempt.endpointBase}/${attempt.model}: ${sanitizeError(err)}`;
+        attemptErrors.push(msg);
+        console.warn(`⚠️ Falha na chamada Gemini (${msg})`);
       }
     }
 
-    // Descobre automaticamente modelos flash ativos caso a Google atualize nomes de versão
+    // Descobre automaticamente modelos flash ativos em ordem decrescente
     try {
       const listRes = await fetch("https://generativelanguage.googleapis.com/v1beta/models", {
         headers: { "x-goog-api-key": geminiKey },
       });
       if (listRes.ok) {
         const listData = await listRes.json();
-        const candidateModel = (listData.models || []).find(
-          (m: any) =>
-            String(m.name || "").includes("flash") &&
-            Array.isArray(m.supportedGenerationMethods) &&
-            m.supportedGenerationMethods.includes("generateContent")
-        );
-        if (candidateModel?.name) {
-          const cleanModel = String(candidateModel.name).replace(/^models\//, "");
-          const res = await runWithGemini({
-            apiKey: geminiKey,
-            model: cleanModel,
-            endpointBase: "aistudio",
-            message,
-            history,
-            ctx,
-            storeName,
-          });
-          return { ...res, aiDiagnostic: "active" };
+        const triedModels = new Set(attempts.map((a) => a.model));
+        const candidateModels = (listData.models || [])
+          .filter((m: any) => {
+            const name = String(m.name || "").toLowerCase();
+            return (
+              name.includes("flash") &&
+              !name.includes("tts") &&
+              !name.includes("image") &&
+              !name.includes("audio") &&
+              !name.includes("live") &&
+              Array.isArray(m.supportedGenerationMethods) &&
+              m.supportedGenerationMethods.includes("generateContent")
+            );
+          })
+          .map((m: any) => String(m.name).replace(/^models\//, ""))
+          .filter((name: string) => !triedModels.has(name))
+          .sort((a: string, b: string) => b.localeCompare(a))
+          .slice(0, 5);
+
+        if (candidateModels.length === 0) {
+          attemptErrors.push(
+            `listModels empty/tried: ${(listData.models || [])
+              .slice(0, 6)
+              .map((m: any) => m.name)
+              .join(",")}`
+          );
         }
+
+        for (const cleanModel of candidateModels) {
+          try {
+            const res = await runWithGemini({
+              apiKey: geminiKey,
+              model: cleanModel,
+              endpointBase: "aistudio",
+              message,
+              history,
+              ctx,
+              storeName,
+            });
+            return { ...res, aiDiagnostic: "active" };
+          } catch (mErr) {
+            hadApiError = true;
+            attemptErrors.push(`disc/${cleanModel}: ${sanitizeError(mErr)}`);
+          }
+        }
+      } else {
+        attemptErrors.push(`listModels HTTP ${listRes.status}`);
       }
     } catch (discErr) {
       hadApiError = true;
-      lastErrorDetail += ` | discovery: ${sanitizeError(discErr)}`;
+      attemptErrors.push(`discovery: ${sanitizeError(discErr)}`);
     }
   }
 
@@ -589,15 +619,17 @@ export async function runAiAgent(params: {
       return { ...res, aiDiagnostic: "active" };
     } catch (err) {
       hadApiError = true;
-      lastErrorDetail = sanitizeError(err);
-      console.warn("⚠️ Falha na chamada OpenAI API, usando fallback MCP:", lastErrorDetail);
+      const msg = sanitizeError(err);
+      attemptErrors.push(`openai: ${msg}`);
+      console.warn("⚠️ Falha na chamada OpenAI API, usando fallback MCP:", msg);
     }
   }
 
   const fallback = await runLocalMcpFallback({ message, ctx, storeName });
+  const combinedErrors = attemptErrors.join(" | ").slice(0, 900);
   return {
     ...fallback,
     aiDiagnostic: hadApiError ? "api_error" : "missing_key",
-    ...(hadApiError && lastErrorDetail ? { aiDiagnosticDetail: lastErrorDetail } : {}),
+    ...(hadApiError && combinedErrors ? { aiDiagnosticDetail: combinedErrors } : {}),
   };
 }
