@@ -27,5 +27,6 @@ CREATE POLICY "Dono gerencia assinaturas push da loja" ON public.push_subscripti
   EXISTS (SELECT 1 FROM public.stores WHERE stores.id = push_subscriptions.store_id AND stores.owner_id = auth.uid())
 );
 
--- 2. Índice para acelerar consultas do Radar de Clientes Sumidos (CRM)
+-- 2. Índice para acelerar consultas do Radar de Clientes Sumidos (CRM) e paridade de stores.is_open
 CREATE INDEX IF NOT EXISTS idx_sales_store_customer_created ON public.sales(store_id, customer_id, created_at DESC);
+ALTER TABLE public.stores ADD COLUMN IF NOT EXISTS is_open BOOLEAN DEFAULT true;

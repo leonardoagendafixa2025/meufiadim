@@ -119,12 +119,10 @@ export async function createCustomerOrderCore(
 
   const supabase = getSupabaseAdmin();
 
-  // 1. Validar loja
+  // 1. Validar loja (usa select("*") para manter compatibilidade caso colunas opcionais como stores.is_open não existam)
   const { data: store, error: storeErr } = await supabase
     .from("stores")
-    .select(
-      "id, owner_id, name, slug, whatsapp, pix_key, pix_city, commission_rate, is_open, status"
-    )
+    .select("*")
     .eq("id", storeId)
     .maybeSingle();
 
@@ -553,6 +551,7 @@ export async function createCustomerOrderCore(
           phone: cleanPhone(store.whatsapp),
           text: merchantLines.filter(Boolean).join("\n"),
         }),
+        signal: AbortSignal.timeout(5000),
       });
 
       merchantNotified = resMerchant.ok;
@@ -614,6 +613,7 @@ export async function createCustomerOrderCore(
                 }
               : null,
         }),
+        signal: AbortSignal.timeout(5000),
       });
 
       customerNotified = resCustomer.ok;

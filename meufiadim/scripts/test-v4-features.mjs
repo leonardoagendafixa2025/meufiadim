@@ -118,8 +118,9 @@ assert.ok(
   orderServiceCode.includes("createCustomerOrderCore") &&
     orderServiceCode.includes("generatePixCopiaECola") &&
     orderServiceCode.includes("sendWebPushToStoreTarget") &&
+    orderServiceCode.includes('.select("*")') &&
     !orderServiceCode.includes("https://meufiadim.com"),
-  "OrderService precisa gerar Pix, enviar Push e nunca usar meufiadim.com"
+  "OrderService precisa gerar Pix, enviar Push, usar select('*') resiliente e nunca usar meufiadim.com"
 );
 console.log("✅ 4. OrderService unificado (Pix + Push + WhatsApp) e módulos CRM/Magic Cart verificados.");
 
