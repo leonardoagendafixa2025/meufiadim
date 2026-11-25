@@ -24,6 +24,7 @@ export interface AgentRunResult {
   cartActions: CartAction[];
   provider: "gemini" | "openai" | "local-mcp";
   aiDiagnostic?: "active" | "missing_key" | "api_error";
+  aiDiagnosticDetail?: string;
 }
 
 function buildSystemPrompt(ctx: MCPToolContext, storeName?: string): string {
@@ -93,12 +94,21 @@ export function toGeminiDeclarations(tools: ReturnType<typeof getToolsForRole>) 
 async function runWithGemini(params: {
   apiKey: string;
   model?: string;
+  endpointBase?: "vertex" | "aistudio";
   message: string;
   history: ChatTurn[];
   ctx: MCPToolContext;
   storeName?: string;
 }): Promise<AgentRunResult> {
-  const { apiKey, model = "gemini-2.5-flash", message, history, ctx, storeName } = params;
+  const {
+    apiKey,
+    model = "gemini-2.5-flash",
+    endpointBase,
+    message,
+    history,
+    ctx,
+    storeName,
+  } = params;
   const tools = getToolsForRole(ctx.role);
   const toolsUsed: string[] = [];
   const cartActions: CartAction[] = [];
@@ -109,19 +119,19 @@ async function runWithGemini(params: {
   }));
   contents.push({ role: "user", parts: [{ text: message }] });
 
-  const isVertexExpressKey = apiKey.startsWith("AQ.");
-  const endpoint = isVertexExpressKey
-    ? `https://aiplatform.googleapis.com/v1/publishers/google/models/${model}:generateContent?key=${encodeURIComponent(
-        apiKey
-      )}`
-    : `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(
-        apiKey
-      )}`;
+  const resolvedBase = endpointBase || (apiKey.startsWith("AQ.") ? "vertex" : "aistudio");
+  const endpoint =
+    resolvedBase === "vertex"
+      ? `https://aiplatform.googleapis.com/v1/publishers/google/models/${model}:generateContent`
+      : `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
   for (let round = 0; round < 4; round++) {
     const res = await fetch(endpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
       body: JSON.stringify({
         systemInstruction: {
           parts: [{ text: buildSystemPrompt(ctx, storeName) }],
@@ -495,13 +505,36 @@ export async function runAiAgent(params: {
   const openAiKey = (process.env.OPENAI_API_KEY || "").trim();
 
   let hadApiError = false;
+  let lastErrorDetail = "";
+
+  const sanitizeError = (err: unknown) => {
+    const raw = err instanceof Error ? err.message : String(err || "");
+    return raw
+      .replace(/AQ\.[A-Za-z0-9._-]+/g, "[KEY]")
+      .replace(/AIza[A-Za-z0-9_-]+/g, "[KEY]")
+      .replace(/key=[^&\s]+/gi, "key=[KEY]")
+      .slice(0, 220);
+  };
 
   if (geminiKey) {
-    for (const model of ["gemini-2.5-flash", "gemini-2.0-flash"]) {
+    const attempts: Array<{ model: string; endpointBase: "vertex" | "aistudio" }> =
+      geminiKey.startsWith("AQ.")
+        ? [
+            { model: "gemini-2.5-flash", endpointBase: "vertex" },
+            { model: "gemini-2.0-flash", endpointBase: "vertex" },
+            { model: "gemini-2.5-flash", endpointBase: "aistudio" },
+          ]
+        : [
+            { model: "gemini-2.5-flash", endpointBase: "aistudio" },
+            { model: "gemini-2.0-flash", endpointBase: "aistudio" },
+          ];
+
+    for (const attempt of attempts) {
       try {
         const res = await runWithGemini({
           apiKey: geminiKey,
-          model,
+          model: attempt.model,
+          endpointBase: attempt.endpointBase,
           message,
           history,
           ctx,
@@ -510,7 +543,8 @@ export async function runAiAgent(params: {
         return { ...res, aiDiagnostic: "active" };
       } catch (err) {
         hadApiError = true;
-        console.warn(`⚠️ Falha na chamada Gemini API (${model}), tentando próximo:`, err);
+        lastErrorDetail = `${attempt.endpointBase}/${attempt.model}: ${sanitizeError(err)}`;
+        console.warn(`⚠️ Falha na chamada Gemini (${lastErrorDetail})`);
       }
     }
   }
@@ -527,7 +561,8 @@ export async function runAiAgent(params: {
       return { ...res, aiDiagnostic: "active" };
     } catch (err) {
       hadApiError = true;
-      console.warn("⚠️ Falha na chamada OpenAI API, usando fallback MCP:", err);
+      lastErrorDetail = sanitizeError(err);
+      console.warn("⚠️ Falha na chamada OpenAI API, usando fallback MCP:", lastErrorDetail);
     }
   }
 
@@ -535,5 +570,6 @@ export async function runAiAgent(params: {
   return {
     ...fallback,
     aiDiagnostic: hadApiError ? "api_error" : "missing_key",
+    ...(hadApiError && lastErrorDetail ? { aiDiagnosticDetail: lastErrorDetail } : {}),
   };
 }
