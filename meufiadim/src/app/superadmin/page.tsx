@@ -382,7 +382,10 @@ export default function SuperAdminPage() {
       .replace(/{slug}/gi, previewStore.slug || "loja-modelo")
       .replace(/{comissao}/gi, `${previewStore.commission_rate ?? 5}%`)
       .replace(/{whatsapp}/gi, previewStore.whatsapp || "")
-      .replace(/{link_loja}/gi, `https://meufiadim.com.br/${previewStore.slug || ""}`);
+      .replace(
+        /{link_loja}/gi,
+        `${typeof window !== "undefined" ? window.location.origin : "https://meufiadimdigital.vercel.app"}/${previewStore.slug || ""}`
+      );
   }, [campaignMessage, previewStore]);
 
   // Contagem de lojas atingidas pelo público
@@ -3165,7 +3168,7 @@ export default function SuperAdminPage() {
                 <div className="bg-slate-900 text-white p-4 rounded-2xl space-y-2 font-mono text-xs">
                   <p className="text-slate-400 font-bold">CREDENCIAIS DE ACESSO:</p>
                   <p>🏪 Loja: <span className="text-purple-300">{createdCredentials.storeName}</span></p>
-                  <p>🔗 Vitrine: <span className="text-emerald-400">meufiadim.com/{createdCredentials.slug}</span></p>
+                  <p suppressHydrationWarning>🔗 Vitrine: <span className="text-emerald-400">{typeof window !== "undefined" ? window.location.host : "meufiadimdigital.vercel.app"}/{createdCredentials.slug}</span></p>
                   <p>📧 E-mail: <span className="text-white font-bold">{createdCredentials.email}</span></p>
                   <p>🔑 Senha: <span className="text-amber-300 font-bold">{createdCredentials.password}</span></p>
                 </div>

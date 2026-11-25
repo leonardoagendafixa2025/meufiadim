@@ -618,7 +618,10 @@ export default function LandingPage() {
               </div>
               <h3 className="font-bold text-lg text-white">Crie sua Loja</h3>
               <p className="text-sm text-slate-400 leading-relaxed">
-                Cadastre seu e-mail e nome da loja. Você ganha na hora um link exclusivo como <code>meufiadim.com/sua-loja</code>.
+                Cadastre seu e-mail e nome da loja. Você ganha na hora um link exclusivo como{" "}
+                <code suppressHydrationWarning>
+                  {typeof window !== "undefined" ? window.location.host : "meufiadimdigital.vercel.app"}/sua-loja
+                </code>.
               </p>
             </div>
 

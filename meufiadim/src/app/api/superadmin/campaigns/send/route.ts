@@ -17,7 +17,8 @@ function interpolateMessage(
     slug?: string | null;
     commission_rate?: number | null;
     whatsapp?: string | null;
-  }
+  },
+  baseUrl = "https://meufiadimdigital.vercel.app"
 ): string {
   const storeName = store.name || "Lojista Parceiro";
   const storeSlug = store.slug || "";
@@ -25,7 +26,8 @@ function interpolateMessage(
     ? `${store.commission_rate}%`
     : "5%";
   const storeWhatsapp = store.whatsapp || "";
-  const storeLink = storeSlug ? `https://meufiadim.com.br/${storeSlug}` : "https://meufiadim.com.br";
+  const cleanBase = baseUrl.replace(/\/$/, "");
+  const storeLink = storeSlug ? `${cleanBase}/${storeSlug}` : cleanBase;
 
   return template
     .replace(/{nome_loja}/gi, storeName)
@@ -86,13 +88,22 @@ export async function POST(req: Request) {
         );
       }
 
+      const publicBaseUrl =
+        req.headers.get("origin") ||
+        process.env.SITE_URL ||
+        "https://meufiadimdigital.vercel.app";
+
       // Interpolação com dados de exemplo realistas
-      const previewText = interpolateMessage(message, {
-        name: "Loja Modelo Exemplo",
-        slug: "loja-exemplo",
-        commission_rate: 8,
-        whatsapp: rawPhone,
-      });
+      const previewText = interpolateMessage(
+        message,
+        {
+          name: "Loja Modelo Exemplo",
+          slug: "loja-exemplo",
+          commission_rate: 8,
+          whatsapp: rawPhone,
+        },
+        publicBaseUrl
+      );
 
       const res = await fetch(`${zapUrl}/send`, {
         method: "POST",
@@ -167,11 +178,16 @@ export async function POST(req: Request) {
       error?: string;
     }> = [];
 
+    const publicBaseUrl =
+      req.headers.get("origin") ||
+      process.env.SITE_URL ||
+      "https://meufiadimdigital.vercel.app";
+
     // Disparo cadenciado com delay seguro entre cada loja para proteção contra spam
     for (let i = 0; i < eligibleStores.length; i++) {
       const store = eligibleStores[i];
       const cleanPhone = (store.whatsapp || "").replace(/\D/g, "");
-      const storeMessage = interpolateMessage(message, store);
+      const storeMessage = interpolateMessage(message, store, publicBaseUrl);
 
       try {
         const res = await fetch(`${zapUrl}/send`, {

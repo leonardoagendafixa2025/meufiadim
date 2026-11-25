@@ -132,13 +132,20 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: insertError.message }, { status: 400 });
     }
 
+    const originUrl =
+      req.headers.get("origin") ||
+      process.env.SITE_URL ||
+      (process.env.NEXT_PUBLIC_APP_URL && !process.env.NEXT_PUBLIC_APP_URL.includes("localhost")
+        ? process.env.NEXT_PUBLIC_APP_URL
+        : "https://meufiadimdigital.vercel.app");
+
     return NextResponse.json({
       ok: true,
       store,
       credentials: {
         email: email.trim(),
         password: password.trim(),
-        loginUrl: `${process.env.NEXT_PUBLIC_APP_URL || "https://meufiadim.com"}/login`,
+        loginUrl: `${originUrl.replace(/\/$/, "")}/login`,
       },
     });
   } catch (err: any) {

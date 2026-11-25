@@ -1242,8 +1242,9 @@ export default function AdminDashboardPage() {
 
           {/* Barra do Link da Vitrine */}
           <div className="mt-4 bg-black/40 backdrop-blur-md rounded-2xl p-2 pl-4 border border-white/10 flex items-center justify-between gap-3 shadow-inner">
-            <span className="text-xs text-slate-300 truncate">
-              meufiadim.com/<strong className="text-white font-extrabold">{store.slug}</strong>
+            <span className="text-xs text-slate-300 truncate" suppressHydrationWarning>
+              {typeof window !== "undefined" ? window.location.host : "meufiadimdigital.vercel.app"}/
+              <strong className="text-white font-extrabold">{store.slug}</strong>
             </span>
             <button
               onClick={handleCopyLink}
