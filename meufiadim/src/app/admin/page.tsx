@@ -60,6 +60,7 @@ import {
   MerchantChargesTab,
   type MerchantChargeItem,
 } from "@/components/admin/MerchantChargesTab";
+import { AdminCopilotWidget } from "@/components/admin/AdminCopilotWidget";
 
 interface Store {
   id: string;
@@ -2386,6 +2387,17 @@ export default function AdminDashboardPage() {
           </button>
         </div>
       </nav>
+      )}
+
+      {store && !merchantAccess.financial_blocked && (
+        <AdminCopilotWidget
+          storeName={store.name}
+          brandColor={store.primary_color || "#059669"}
+          onDataChanged={() => {
+            loadDashboard();
+            loadEncomendas();
+          }}
+        />
       )}
 
       {/* Modais de Transação, Cliente, Produto e MP */}

@@ -53,6 +53,7 @@ import {
   type CustomerUser,
 } from "@/components/store/StoreCustomerAuthModal";
 import { StoreCustomerOrdersModal } from "@/components/store/StoreCustomerOrdersModal";
+import { StoreSellerChatWidget } from "@/components/store/StoreSellerChatWidget";
 import { formatPhoneBR } from "@/lib/customer-auth";
 
 interface Store {
@@ -1851,6 +1852,27 @@ export default function TenantStorePage() {
             </div>
           </div>
         </div>
+      )}
+
+      {store && store.status === "active" && (
+        <StoreSellerChatWidget
+          storeId={store.id}
+          storeSlug={store.slug}
+          storeName={store.name}
+          brandColor={brandColor}
+          customerId={customerUser?.id || null}
+          hasFloatingCartBar={totalItems > 0}
+          onCartActions={(actions) => {
+            actions.forEach((act) => {
+              if (act.type === "add_to_cart") {
+                const found = products.find((p) => p.id === act.productId);
+                if (found) {
+                  addToCart(found, act.qty || 1);
+                }
+              }
+            });
+          }}
+        />
       )}
 
       {/* RODAPÉ */}

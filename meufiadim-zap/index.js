@@ -43,6 +43,105 @@ app.use((req, res, next) => {
 
 const MAIN_PORT = parseInt(process.env.PORT || "8080", 10);
 const API_KEY = process.env.API_KEY || "minha-chave-secreta-meufiadim";
+const APP_API_URL = (process.env.APP_API_URL || "https://meufiadimdigital.vercel.app").replace(/\/$/, "");
+const processedIncomingMessages = new Map();
+
+function rememberIncomingMessage(id) {
+  if (!id) return false;
+  if (processedIncomingMessages.has(id)) return true;
+  const now = Date.now();
+  processedIncomingMessages.set(id, now);
+  if (processedIncomingMessages.size > 400) {
+    for (const [key, ts] of processedIncomingMessages.entries()) {
+      if (now - ts > 5 * 60 * 1000 || processedIncomingMessages.size > 400) {
+        processedIncomingMessages.delete(key);
+      }
+    }
+  }
+  return false;
+}
+
+function extractIncomingText(message) {
+  if (!message) return "";
+  return String(
+    message.conversation ||
+      message.extendedTextMessage?.text ||
+      message.imageMessage?.caption ||
+      message.videoMessage?.caption ||
+      ""
+  ).trim();
+}
+
+function resolveIncomingPhone(key) {
+  const candidates = [key?.remoteJidAlt, key?.senderPn, key?.remoteJid].filter(Boolean);
+  for (const jid of candidates) {
+    if (String(jid).endsWith("@s.whatsapp.net")) {
+      return String(jid).split("@")[0].split(":")[0].replace(/\D/g, "");
+    }
+  }
+  return "";
+}
+
+async function handleIncomingAiMessage(msg) {
+  try {
+    if (!sock || !isConnected || !msg?.key) return;
+    if (msg.key.fromMe) return;
+
+    const remoteJid = msg.key.remoteJid || "";
+    if (
+      !remoteJid ||
+      remoteJid === "status@broadcast" ||
+      remoteJid.endsWith("@g.us") ||
+      remoteJid.endsWith("@newsletter")
+    ) {
+      return;
+    }
+
+    if (rememberIncomingMessage(msg.key.id)) return;
+
+    const msgTs = Number(msg.messageTimestamp || 0);
+    if (msgTs > 0 && Math.floor(Date.now() / 1000) - msgTs > 120) {
+      return;
+    }
+
+    const text = extractIncomingText(msg.message);
+    if (!text) return;
+
+    const fromPhone = resolveIncomingPhone(msg.key);
+    if (!fromPhone) return;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 20000);
+
+    try {
+      const response = await fetch(`${APP_API_URL}/api/ai/whatsapp`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": API_KEY,
+        },
+        body: JSON.stringify({ fromPhone, text }),
+        signal: controller.signal,
+      });
+
+      const data = await response.json().catch(() => null);
+      if (!response.ok || !data?.ok || !data?.shouldReply || !data?.reply) {
+        return;
+      }
+
+      const sentReply = await sock.sendMessage(remoteJid, {
+        text: String(data.reply),
+      });
+      rememberSentMessage(sentReply);
+      scheduleSessionBackup();
+      console.log(`🤖 Resposta IA (${data.role || "bot"}) enviada para ${fromPhone}`);
+    } finally {
+      clearTimeout(timer);
+    }
+  } catch (err) {
+    console.warn("⚠️ Falha ao processar mensagem com IA:", err?.message || err);
+  }
+}
 
 const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -194,8 +293,12 @@ async function connectToWhatsApp() {
       scheduleSessionBackup();
     });
 
-    sock.ev.on("messages.upsert", () => {
+    sock.ev.on("messages.upsert", async (upsert) => {
       scheduleSessionBackup();
+      if (upsert?.type !== "notify" || !Array.isArray(upsert?.messages)) return;
+      for (const msg of upsert.messages) {
+        await handleIncomingAiMessage(msg);
+      }
     });
 
     sock.ev.on("connection.update", async (update) => {
