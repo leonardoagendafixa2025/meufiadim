@@ -37,9 +37,10 @@ function buildSystemPrompt(ctx: MCPToolContext, storeName?: string): string {
       `Você é o Assistente oficial da loja "${storeName || "MEU FIADIM"}" no MEU FIADIM.`,
       `Data de hoje em Brasília: ${today}.`,
       `Você conversa com o LOJISTA dono do negócio em português do Brasil claro, direto, amigável e prático.`,
+      `Você pode consultar resumo financeiro, listar devedores, ver estoque baixo, acompanhar/atualizar pedidos (EM_PREPARO, SAIU_ENTREGA, ENTREGUE), lançar vendas no fiado (create_fiado_sale), dar baixa de pagamentos (record_fiado_payment), cadastrar encomendas e enviar cobranças no WhatsApp.`,
       `Use SEMPRE suas ferramentas para consultar números, clientes, saldos, encomendas e cardápio — nunca invente valores ou clientes.`,
       `REGRA DE SEGURANÇA PARA AÇÕES SENSÍVEIS:`,
-      `- Para ações de escrita ou envio no WhatsApp (create_encomenda, send_whatsapp_charge), se o usuário já informou explicitamente todos os dados e pediu para executar, execute; se faltar algum dado obrigatório (ex: valor ou data combinada de pagamento) ou se for um comando ambíguo, peça confirmação antes de chamar a tool.`,
+      `- Para ações de escrita ou envio (create_fiado_sale, record_fiado_payment, create_encomenda, send_whatsapp_charge, update_order_status), se o lojista informou cliente e valor/status claramente, execute; se faltar dado obrigatório ou houver ambiguidade, peça confirmação antes.`,
       `- Nunca altere comissões da plataforma nem prometa recursos inexistentes.`,
       `Formate valores monetários em Real (R$) e use listas curtas e legíveis.`,
     ].join("\n");
@@ -126,7 +127,7 @@ async function runWithGemini(params: {
       : `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
 
   for (let round = 0; round < 4; round++) {
-    const res = await fetch(endpoint, {
+    let res = await fetch(endpoint, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -144,6 +145,29 @@ async function runWithGemini(params: {
         },
       }),
     });
+
+    // Retry rápido em caso de pico 503 temporário
+    if (res.status === 503) {
+      await new Promise((r) => setTimeout(r, 700));
+      res = await fetch(endpoint, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [{ text: buildSystemPrompt(ctx, storeName) }],
+          },
+          contents,
+          tools: [{ functionDeclarations: toGeminiDeclarations(tools) }],
+          generationConfig: {
+            temperature: 0.35,
+            maxOutputTokens: 1500,
+          },
+        }),
+      });
+    }
 
     if (!res.ok) {
       const errText = await res.text();
@@ -315,6 +339,75 @@ async function runLocalMcpFallback(params: {
   const cartActions: CartAction[] = [];
 
   if (ctx.role === "merchant") {
+    // Comando rápido determinístico de lançamento no fiado (ex: "anota 45 no fiado do Joao")
+    const quickFiadoMatch = message.match(
+      /(?:anota|lanca|lança|venda)\s+(?:r\$\s*)?(\d+(?:[.,]\d{1,2})?)\s+(?:no\s+fiado\s+(?:do|da|de|para)|para|pro|pra)\s+(.+)/i
+    );
+    if (quickFiadoMatch) {
+      const amount = Number(quickFiadoMatch[1].replace(",", "."));
+      const rawCustomer = quickFiadoMatch[2].trim();
+      if (amount > 0 && rawCustomer.length >= 2) {
+        toolsUsed.push("create_fiado_sale");
+        const res = await executeMcpTool(
+          "create_fiado_sale",
+          { customerQuery: rawCustomer, amount, paymentMethod: "Fiado" },
+          ctx
+        );
+        return {
+          reply: res.error ? `⚠️ ${res.error}` : `✅ ${res.message}`,
+          toolsUsed,
+          cartActions,
+          provider: "local-mcp",
+        };
+      }
+    }
+
+    if (q.includes("estoque baixo") || q.includes("acabando") || q.includes("esgotad")) {
+      toolsUsed.push("get_low_stock_products");
+      const res = await executeMcpTool("get_low_stock_products", {}, ctx);
+      if (!res.products?.length) {
+        return {
+          reply: `✅ Nenhum produto está com estoque baixo (≤ ${res.threshold} un) no momento.`,
+          toolsUsed,
+          cartActions,
+          provider: "local-mcp",
+        };
+      }
+      const lines = res.products.map(
+        (p: any) =>
+          `• *${p.name}* — ${p.stock === 0 ? "ESGOTADO" : `${p.stock} un restantes`} (${p.priceFormatted})`
+      );
+      return {
+        reply: `⚠️ *Alerta de Estoque Baixo (${res.count}):*\n\n${lines.join("\n")}`,
+        toolsUsed,
+        cartActions,
+        provider: "local-mcp",
+      };
+    }
+
+    if (q.includes("pedido") || q.includes("em aberto") || q.includes("preparo")) {
+      toolsUsed.push("list_store_orders");
+      const res = await executeMcpTool("list_store_orders", { onlyOpen: true }, ctx);
+      if (!res.orders?.length) {
+        return {
+          reply: "✅ Nenhum pedido em andamento no momento.",
+          toolsUsed,
+          cartActions,
+          provider: "local-mcp",
+        };
+      }
+      const lines = res.orders.map(
+        (o: any) =>
+          `• *${o.customerName}* — ${o.totalFormatted} [${o.status}] (${o.description})`
+      );
+      return {
+        reply: `🛵 *Pedidos em Andamento (${res.count}):*\n\n${lines.join("\n")}`,
+        toolsUsed,
+        cartActions,
+        provider: "local-mcp",
+      };
+    }
+
     if (
       q.includes("atrasad") ||
       q.includes("vencid") ||

@@ -28,9 +28,10 @@ interface AdminCopilotWidgetProps {
 
 const QUICK_SUGGESTIONS = [
   "Resumo do fiado",
+  "Pedidos em aberto",
+  "Estoque baixo",
   "Clientes em atraso",
   "Encomendas pendentes",
-  "Produtos em estoque",
 ];
 
 function renderFormattedText(text: string) {
@@ -141,8 +142,15 @@ export function AdminCopilotWidget({
 
       const toolsUsed: string[] = Array.isArray(data.toolsUsed) ? data.toolsUsed : [];
       if (
-        toolsUsed.includes("create_encomenda") ||
-        toolsUsed.includes("send_whatsapp_charge")
+        toolsUsed.some((t) =>
+          [
+            "create_encomenda",
+            "send_whatsapp_charge",
+            "create_fiado_sale",
+            "record_fiado_payment",
+            "update_order_status",
+          ].includes(t)
+        )
       ) {
         onDataChanged?.();
       }

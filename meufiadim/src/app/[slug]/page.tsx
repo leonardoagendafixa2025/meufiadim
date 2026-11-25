@@ -38,6 +38,8 @@ import {
   Truck,
   Lock,
   Loader2,
+  Tag,
+  Award,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { formatBRL } from "@/lib/whatsapp";
@@ -55,6 +57,7 @@ import {
 import { StoreCustomerOrdersModal } from "@/components/store/StoreCustomerOrdersModal";
 import { StoreSellerChatWidget } from "@/components/store/StoreSellerChatWidget";
 import { formatPhoneBR } from "@/lib/customer-auth";
+import type { LoyaltyConfig } from "@/lib/store-features";
 
 interface Store {
   id: string;
@@ -181,6 +184,20 @@ export default function TenantStorePage() {
     customerNotified: boolean;
     whatsappFallbackUrl?: string;
   } | null>(null);
+
+  // Cupons e Fidelidade
+  const [couponInput, setCouponInput] = useState("");
+  const [appliedCoupon, setAppliedCoupon] = useState<{
+    code: string;
+    discountType: "percent" | "fixed";
+    discountValue: number;
+    discountAmount: number;
+  } | null>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [validatingCoupon, setValidatingCoupon] = useState(false);
+  const [loyaltyConfig, setLoyaltyConfig] = useState<LoyaltyConfig | null>(null);
+  const [customerPoints, setCustomerPoints] = useState(0);
+  const [redeemLoyalty, setRedeemLoyalty] = useState(false);
 
   // Modal de Detalhes do Produto
   const [selectedProductDetails, setSelectedProductDetails] = useState<Product | null>(null);
@@ -375,6 +392,24 @@ export default function TenantStorePage() {
     }
   }, [store?.id]);
 
+  // Carrega configuração de fidelidade e pontos do cliente
+  useEffect(() => {
+    if (!store?.id) return;
+    fetch(
+      `/api/store/promotions?storeId=${store.id}&customerId=${customerUser?.id || ""}`
+    )
+      .then((res) => res.json())
+      .then((data) => {
+        if (data?.ok) {
+          if (data.loyaltyConfig) setLoyaltyConfig(data.loyaltyConfig);
+          if (data.customerPoints !== undefined) {
+            setCustomerPoints(Number(data.customerPoints || 0));
+          }
+        }
+      })
+      .catch(() => {});
+  }, [store?.id, customerUser?.id]);
+
   // Lista de categorias únicas derivadas dos produtos e categorias configuradas
   const categories = useMemo(() => {
     const fromProds = products.map((p) => p.category?.trim() || "Geral");
@@ -452,7 +487,61 @@ export default function TenantStorePage() {
   const totalItems = cart.reduce((acc, i) => acc + i.qty, 0);
   const subtotalPrice = cart.reduce((acc, i) => acc + i.product.price * i.qty, 0);
   const deliveryCost = deliveryType === "retirada" ? 0 : calculatedFreight;
-  const finalTotalPrice = subtotalPrice + deliveryCost;
+  const couponDiscountAmount = appliedCoupon
+    ? Math.min(
+        subtotalPrice,
+        appliedCoupon.discountType === "percent"
+          ? Number(((subtotalPrice * appliedCoupon.discountValue) / 100).toFixed(2))
+          : appliedCoupon.discountValue
+      )
+    : 0;
+  const loyaltyDiscountAmount =
+    redeemLoyalty &&
+    loyaltyConfig?.enabled &&
+    customerPoints >= loyaltyConfig.targetOrders
+      ? Math.min(
+          Math.max(0, subtotalPrice - couponDiscountAmount),
+          loyaltyConfig.rewardAmount
+        )
+      : 0;
+  const finalTotalPrice = Number(
+    Math.max(
+      0,
+      subtotalPrice - couponDiscountAmount - loyaltyDiscountAmount + deliveryCost
+    ).toFixed(2)
+  );
+
+  const handleApplyCoupon = async () => {
+    const code = couponInput.trim().toUpperCase();
+    if (!code || !store?.id) return;
+    setValidatingCoupon(true);
+    setCouponError(null);
+    try {
+      const res = await fetch(
+        `/api/store/promotions?storeId=${store.id}&validateCode=${encodeURIComponent(
+          code
+        )}&subtotal=${subtotalPrice}`
+      );
+      const data = await res.json();
+      const val = data?.couponValidation;
+      if (!val?.valid) {
+        setAppliedCoupon(null);
+        setCouponError(val?.error || "Cupom inválido ou expirado.");
+        return;
+      }
+      setAppliedCoupon({
+        code: val.code,
+        discountType: val.discountType,
+        discountValue: val.discountValue,
+        discountAmount: val.discountAmount,
+      });
+      showToast(`Cupom ${val.code} aplicado!`);
+    } catch {
+      setCouponError("Erro ao validar cupom.");
+    } finally {
+      setValidatingCoupon(false);
+    }
+  };
 
   const brandColor = store?.primary_color || "#059669";
 
@@ -550,6 +639,8 @@ export default function TenantStorePage() {
           freightFee: deliveryCost,
           address: destinationAddress,
           notes: notes.trim(),
+          couponCode: appliedCoupon?.code || null,
+          redeemLoyalty,
           description: cart.map((i) => `${i.qty}x ${i.product.name}`).join(" • "),
           items: cart.map((i) => ({
             id: i.product.id,
@@ -600,8 +691,14 @@ export default function TenantStorePage() {
 
       setCart([]);
       setCartOpen(false);
+      setAppliedCoupon(null);
+      setCouponInput("");
+      setRedeemLoyalty(false);
+      if (orderData.loyaltyPoints !== undefined) {
+        setCustomerPoints(Number(orderData.loyaltyPoints));
+      }
       setOrderSuccessInfo({
-        total: finalTotalPrice,
+        total: orderData.finalTotal !== undefined ? Number(orderData.finalTotal) : finalTotalPrice,
         paymentMethod,
         merchantNotified: Boolean(orderData.merchantNotified),
         customerNotified: Boolean(orderData.customerNotified),
@@ -1661,6 +1758,84 @@ export default function TenantStorePage() {
                 </div>
               </div>
 
+              {/* Cupom de Desconto & Fidelidade */}
+              <div className="space-y-2.5">
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Tag className="w-3.5 h-3.5 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                    <input
+                      type="text"
+                      placeholder="Cupom de desconto (se tiver)"
+                      value={couponInput}
+                      onChange={(e) => setCouponInput(e.target.value.toUpperCase())}
+                      className="w-full pl-9 pr-3 py-2.5 bg-slate-50 dark:bg-slate-800/80 border border-slate-200/80 dark:border-slate-700 rounded-2xl text-xs font-bold uppercase text-slate-900 dark:text-white placeholder:normal-case placeholder:font-medium placeholder:text-slate-400 focus:outline-none"
+                    />
+                  </div>
+                  {appliedCoupon ? (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setAppliedCoupon(null);
+                        setCouponInput("");
+                        setCouponError(null);
+                      }}
+                      className="px-3.5 py-2.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-2xl text-xs font-extrabold shrink-0"
+                    >
+                      Remover
+                    </button>
+                  ) : (
+                    <button
+                      type="button"
+                      disabled={validatingCoupon || !couponInput.trim()}
+                      onClick={handleApplyCoupon}
+                      className="px-4 py-2.5 bg-slate-900 dark:bg-slate-700 text-white rounded-2xl text-xs font-extrabold shrink-0 disabled:opacity-40"
+                    >
+                      {validatingCoupon ? "..." : "Aplicar"}
+                    </button>
+                  )}
+                </div>
+
+                {couponError && (
+                  <p className="text-[11px] font-bold text-rose-600 px-1">{couponError}</p>
+                )}
+
+                {appliedCoupon && (
+                  <p className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 px-1">
+                    ✅ Cupom {appliedCoupon.code} aplicado (-{formatBRL(couponDiscountAmount)})
+                  </p>
+                )}
+
+                {customerUser && loyaltyConfig?.enabled && (
+                  <div className="p-3 rounded-2xl bg-amber-50/80 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-800/60 flex items-center justify-between gap-2 text-xs">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Award className="w-4 h-4 text-amber-500 shrink-0" />
+                      <span className="font-bold text-slate-800 dark:text-slate-200 truncate">
+                        Fidelidade: {customerPoints}/{loyaltyConfig.targetOrders} carimbos
+                      </span>
+                    </div>
+                    {customerPoints >= loyaltyConfig.targetOrders ? (
+                      <button
+                        type="button"
+                        onClick={() => setRedeemLoyalty((prev) => !prev)}
+                        className={`px-3 py-1.5 rounded-xl font-black text-[11px] shrink-0 transition ${
+                          redeemLoyalty
+                            ? "bg-emerald-600 text-white"
+                            : "bg-amber-400 text-slate-950"
+                        }`}
+                      >
+                        {redeemLoyalty
+                          ? `Resgatado (-${formatBRL(loyaltyConfig.rewardAmount)})`
+                          : `Usar Prêmio ${formatBRL(loyaltyConfig.rewardAmount)}`}
+                      </button>
+                    ) : (
+                      <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300 shrink-0">
+                        +1 neste pedido
+                      </span>
+                    )}
+                  </div>
+                )}
+              </div>
+
               {/* Observações */}
               <textarea
                 placeholder="Observações do pedido (ex: sem cebola, ponto da carne, troco para 50...)"
@@ -1684,6 +1859,18 @@ export default function TenantStorePage() {
                       : formatBRL(deliveryCost)}
                   </span>
                 </div>
+                {couponDiscountAmount > 0 && (
+                  <div className="flex justify-between text-emerald-600 font-bold">
+                    <span>Desconto Cupom ({appliedCoupon?.code})</span>
+                    <span>-{formatBRL(couponDiscountAmount)}</span>
+                  </div>
+                )}
+                {loyaltyDiscountAmount > 0 && (
+                  <div className="flex justify-between text-amber-600 font-bold">
+                    <span>Prêmio Fidelidade</span>
+                    <span>-{formatBRL(loyaltyDiscountAmount)}</span>
+                  </div>
+                )}
                 <div className="flex justify-between text-sm font-black text-slate-900 dark:text-white pt-1 border-t border-slate-200 dark:border-slate-700">
                   <span>Total</span>
                   <span style={{ color: brandColor }}>{formatBRL(finalTotalPrice)}</span>

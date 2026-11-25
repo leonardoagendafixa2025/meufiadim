@@ -13,6 +13,12 @@ import {
   cleanCep,
   formatCep,
 } from "@/lib/viacep";
+import {
+  buildOrderStatusWhatsAppMessage,
+  normalizeOrderStatus,
+  VALID_ORDER_STATUSES,
+  type OrderStatus,
+} from "@/lib/store-features";
 
 export type MCPUserRole = "merchant" | "customer";
 
@@ -471,6 +477,457 @@ export const MCP_TOOLS: MCPToolDefinition[] = [
       return {
         ok: true,
         message: `Cobrança de ${formatBRL(customer.balance)} enviada com sucesso para ${customer.name} (${formatPhoneBR(customer.phone)})!`,
+      };
+    },
+  },
+  {
+    name: "create_fiado_sale",
+    description:
+      "Lança uma venda no fiado (ou Pix/Dinheiro/Cartão) diretamente para um cliente existente da loja, atualiza o saldo devedor e opcionalmente envia recibo no WhatsApp.",
+    roles: ["merchant"],
+    inputSchema: {
+      type: "object",
+      properties: {
+        customerQuery: {
+          type: "string",
+          description: "Nome, telefone ou ID do cliente já cadastrado na loja.",
+        },
+        amount: {
+          type: "number",
+          description: "Valor da compra/venda em reais (ex: 45.50).",
+        },
+        description: {
+          type: "string",
+          description: "Descrição opcional dos itens (ex: 2 refrigerantes e 1 pão).",
+        },
+        dueDate: {
+          type: "string",
+          description: "Data opcional de vencimento no formato YYYY-MM-DD.",
+        },
+        paymentMethod: {
+          type: "string",
+          description: "Forma de pagamento: Fiado (padrão), Pix, Dinheiro ou Cartão.",
+        },
+        notifyCustomer: {
+          type: "boolean",
+          description: "Se true (padrão), envia comprovante ao cliente no WhatsApp.",
+        },
+      },
+      required: ["customerQuery", "amount"],
+    },
+    execute: async (args, ctx) => {
+      const access = await canMerchantAccessSystem(ctx.storeId);
+      if (!access.allowed) {
+        return { error: access.reason || "Loja bloqueada operacionalmente." };
+      }
+
+      const amount = Number(args.amount);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        return { error: "Valor da venda inválido. Informe um número positivo." };
+      }
+
+      const supabase = getSupabaseAdmin();
+      const { data: store } = await supabase
+        .from("stores")
+        .select("id, name, commission_rate")
+        .eq("id", ctx.storeId)
+        .single();
+
+      if (!store) return { error: "Loja não encontrada." };
+
+      const q = String(args.customerQuery || "").trim();
+      const { data: customers } = await supabase
+        .from("customers")
+        .select("*")
+        .eq("store_id", ctx.storeId);
+
+      const digits = cleanPhone(q);
+      const customer = (customers || []).find(
+        (c) =>
+          c.id === q ||
+          c.name.toLowerCase().includes(q.toLowerCase()) ||
+          (digits.length >= 6 && (c.phone || "").includes(digits))
+      );
+
+      if (!customer) {
+        return { error: `Cliente "${q}" não encontrado no cadastro da loja.` };
+      }
+
+      const paymentMethod = String(args.paymentMethod || "Fiado").trim() || "Fiado";
+      const isFiado = paymentMethod.toLowerCase().includes("fiado");
+      const dueDate = args.dueDate ? String(args.dueDate).trim() : null;
+
+      let nextBalance = Number(customer.balance || 0);
+      if (isFiado) {
+        nextBalance = Number((nextBalance + amount).toFixed(2));
+        await supabase
+          .from("customers")
+          .update({
+            balance: nextBalance,
+            due_date: dueDate || customer.due_date || null,
+            notify_date: dueDate || customer.notify_date || null,
+          })
+          .eq("id", customer.id);
+      }
+
+      const commission = Number(
+        ((amount * Number(store.commission_rate || 5)) / 100).toFixed(2)
+      );
+      const descText = String(args.description || "Lançamento rápido via Assistente IA").trim();
+
+      const { data: insertedSale, error: saleErr } = await supabase
+        .from("sales")
+        .insert({
+          store_id: store.id,
+          customer_id: customer.id,
+          total_amount: amount,
+          commission_amount: commission,
+          payment_method: paymentMethod,
+          description: descText,
+        })
+        .select("id")
+        .single();
+
+      if (saleErr) {
+        const minRes = await supabase
+          .from("sales")
+          .insert({
+            store_id: store.id,
+            customer_id: customer.id,
+            total_amount: amount,
+            commission_amount: commission,
+            payment_method: paymentMethod,
+          })
+          .select("id")
+          .single();
+        if (minRes.error) return { error: minRes.error.message };
+      }
+
+      let customerNotified = false;
+      if (args.notifyCustomer !== false && customer.phone && isFiado) {
+        try {
+          const msgLines = [
+            `📒 *Nova anotação no fiado — ${store.name}*`,
+            ``,
+            `Olá, *${customer.name.split(" ")[0]}*!`,
+            `Registramos *${formatBRL(amount)}* referente a: ${descText}`,
+            `💰 *Saldo atualizado no fiado:* ${formatBRL(nextBalance)}`,
+          ];
+          if (dueDate || customer.due_date) {
+            const dt = dueDate || customer.due_date;
+            msgLines.push(
+              `📅 *Vencimento:* ${new Date(`${dt}T12:00:00`).toLocaleDateString("pt-BR")}`
+            );
+          }
+
+          const zapRes = await fetch(`${getZapApiUrl()}/send`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": getZapApiKey(),
+            },
+            body: JSON.stringify({
+              phone: cleanPhone(customer.phone),
+              text: msgLines.join("\n"),
+            }),
+          });
+          customerNotified = zapRes.ok;
+        } catch {}
+      }
+
+      return {
+        ok: true,
+        saleId: insertedSale?.id || null,
+        customerName: customer.name,
+        amountFormatted: formatBRL(amount),
+        newBalanceFormatted: formatBRL(nextBalance),
+        customerNotified,
+        message: `Venda (${paymentMethod}) de ${formatBRL(amount)} lançada para ${customer.name}!${isFiado ? ` Novo saldo no fiado: ${formatBRL(nextBalance)}.` : ""}`,
+      };
+    },
+  },
+  {
+    name: "record_fiado_payment",
+    description:
+      "Registra um pagamento (parcial ou total) para abater o saldo devedor de fiado de um cliente cadastrado.",
+    roles: ["merchant"],
+    inputSchema: {
+      type: "object",
+      properties: {
+        customerQuery: {
+          type: "string",
+          description: "Nome ou telefone do cliente que pagou.",
+        },
+        amount: {
+          type: "number",
+          description: "Valor pago em reais (se omitido, quita todo o saldo em aberto).",
+        },
+      },
+      required: ["customerQuery"],
+    },
+    execute: async (args, ctx) => {
+      const access = await canMerchantAccessSystem(ctx.storeId);
+      if (!access.allowed) {
+        return { error: access.reason || "Loja bloqueada operacionalmente." };
+      }
+
+      const supabase = getSupabaseAdmin();
+      const q = String(args.customerQuery || "").trim();
+      const { data: customers } = await supabase
+        .from("customers")
+        .select("*")
+        .eq("store_id", ctx.storeId);
+
+      const digits = cleanPhone(q);
+      const customer = (customers || []).find(
+        (c) =>
+          c.id === q ||
+          c.name.toLowerCase().includes(q.toLowerCase()) ||
+          (digits.length >= 6 && (c.phone || "").includes(digits))
+      );
+
+      if (!customer) {
+        return { error: `Cliente "${q}" não encontrado.` };
+      }
+
+      const currentBal = Number(customer.balance || 0);
+      if (currentBal <= 0) {
+        return { error: `${customer.name} já está com saldo zerado no fiado.` };
+      }
+
+      const payVal =
+        args.amount !== undefined && Number(args.amount) > 0
+          ? Number(args.amount)
+          : currentBal;
+      const nextBalance = Math.max(0, Number((currentBal - payVal).toFixed(2)));
+
+      await supabase
+        .from("customers")
+        .update({
+          balance: nextBalance,
+          due_date: nextBalance === 0 ? null : customer.due_date,
+          notify_date: nextBalance === 0 ? null : customer.notify_date,
+        })
+        .eq("id", customer.id);
+
+      return {
+        ok: true,
+        customerName: customer.name,
+        paidFormatted: formatBRL(payVal),
+        remainingBalanceFormatted: formatBRL(nextBalance),
+        message: `Baixa de ${formatBRL(payVal)} registrada para ${customer.name}. Saldo restante: ${formatBRL(nextBalance)}.`,
+      };
+    },
+  },
+  {
+    name: "list_store_orders",
+    description:
+      "Lista os pedidos recentes da loja com o status atual (RECEBIDO, EM_PREPARO, SAIU_ENTREGA, ENTREGUE).",
+    roles: ["merchant"],
+    inputSchema: {
+      type: "object",
+      properties: {
+        onlyOpen: {
+          type: "boolean",
+          description: "Se true, mostra apenas pedidos em andamento (não entregues/cancelados).",
+        },
+      },
+    },
+    execute: async (args, ctx) => {
+      const info = await getStoreWithOwnerMetadata(ctx.storeId);
+      const statusMap: Record<string, string> = info?.meta?.order_statuses || {};
+      const supabase = getSupabaseAdmin();
+
+      const { data: rows } = await supabase
+        .from("sales")
+        .select("id, total_amount, payment_method, description, order_status, created_at, customer:customers(name, phone)")
+        .eq("store_id", ctx.storeId)
+        .order("created_at", { ascending: false })
+        .limit(20);
+
+      let list = (rows || []).map((r: any) => {
+        const cust = Array.isArray(r.customer) ? r.customer[0] : r.customer;
+        const status = normalizeOrderStatus(r.order_status || statusMap[r.id] || "RECEBIDO");
+        return {
+          id: r.id,
+          customerName: cust?.name || "Balcão",
+          totalFormatted: formatBRL(r.total_amount),
+          paymentMethod: r.payment_method,
+          description: r.description || "Pedido",
+          status,
+          createdAt: r.created_at,
+        };
+      });
+
+      if (args.onlyOpen) {
+        list = list.filter(
+          (o) =>
+            o.status === "RECEBIDO" ||
+            o.status === "EM_PREPARO" ||
+            o.status === "SAIU_ENTREGA"
+        );
+      }
+
+      return { count: list.length, orders: list.slice(0, 10) };
+    },
+  },
+  {
+    name: "update_order_status",
+    description:
+      "Atualiza o status de um pedido da loja (EM_PREPARO, SAIU_ENTREGA, ENTREGUE ou CANCELADO) e avisa o cliente no WhatsApp.",
+    roles: ["merchant"],
+    inputSchema: {
+      type: "object",
+      properties: {
+        orderId: {
+          type: "string",
+          description: "ID do pedido (opcional se informar customerQuery).",
+        },
+        customerQuery: {
+          type: "string",
+          description: "Nome do cliente para atualizar o pedido mais recente dele.",
+        },
+        status: {
+          type: "string",
+          description: "Novo status: RECEBIDO, EM_PREPARO, SAIU_ENTREGA, ENTREGUE ou CANCELADO.",
+        },
+      },
+      required: ["status"],
+    },
+    execute: async (args, ctx) => {
+      const access = await canMerchantAccessSystem(ctx.storeId);
+      if (!access.allowed) {
+        return { error: access.reason || "Loja bloqueada operacionalmente." };
+      }
+
+      const nextStatus = String(args.status || "").toUpperCase().trim() as OrderStatus;
+      if (!VALID_ORDER_STATUSES.includes(nextStatus)) {
+        return { error: "Status inválido. Use EM_PREPARO, SAIU_ENTREGA, ENTREGUE ou CANCELADO." };
+      }
+
+      const supabase = getSupabaseAdmin();
+      const info = await getStoreWithOwnerMetadata(ctx.storeId);
+      if (!info) return { error: "Loja não encontrada." };
+
+      let targetOrder: any = null;
+      if (args.orderId) {
+        const { data } = await supabase
+          .from("sales")
+          .select("*, customer:customers(id, name, phone)")
+          .eq("id", args.orderId)
+          .eq("store_id", ctx.storeId)
+          .maybeSingle();
+        targetOrder = data;
+      } else if (args.customerQuery) {
+        const q = String(args.customerQuery).toLowerCase().trim();
+        const { data: rows } = await supabase
+          .from("sales")
+          .select("*, customer:customers(id, name, phone)")
+          .eq("store_id", ctx.storeId)
+          .order("created_at", { ascending: false })
+          .limit(30);
+        targetOrder = (rows || []).find((r: any) => {
+          const c = Array.isArray(r.customer) ? r.customer[0] : r.customer;
+          return c?.name?.toLowerCase().includes(q);
+        });
+      }
+
+      if (!targetOrder) {
+        return { error: "Pedido não encontrado para atualizar status." };
+      }
+
+      await supabase
+        .from("sales")
+        .update({ order_status: nextStatus, status_updated_at: new Date().toISOString() })
+        .eq("id", targetOrder.id)
+        .eq("store_id", ctx.storeId);
+
+      if (info.store.owner_id) {
+        const currentMap = { ...(info.meta.order_statuses || {}), [targetOrder.id]: nextStatus };
+        await supabase.auth.admin.updateUserById(info.store.owner_id, {
+          user_metadata: { ...info.meta, order_statuses: currentMap },
+        });
+      }
+
+      const cust = Array.isArray(targetOrder.customer)
+        ? targetOrder.customer[0]
+        : targetOrder.customer;
+      let notified = false;
+      if (cust?.phone) {
+        try {
+          const deliveryType =
+            targetOrder.delivery_type ||
+            info.meta?.order_details?.[targetOrder.id]?.delivery_type ||
+            null;
+          const msgText = buildOrderStatusWhatsAppMessage({
+            customerName: cust.name,
+            storeName: info.store.name,
+            status: nextStatus,
+            deliveryType,
+          });
+          const res = await fetch(`${getZapApiUrl()}/send`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": getZapApiKey(),
+            },
+            body: JSON.stringify({ phone: cleanPhone(cust.phone), text: msgText }),
+          });
+          notified = res.ok;
+        } catch {}
+      }
+
+      return {
+        ok: true,
+        orderId: targetOrder.id,
+        status: nextStatus,
+        customerName: cust?.name || "Cliente",
+        customerNotified: notified,
+        message: `Pedido de ${cust?.name || "Cliente"} atualizado para ${nextStatus}${notified ? " e cliente avisado no WhatsApp!" : "."}`,
+      };
+    },
+  },
+  {
+    name: "get_low_stock_products",
+    description:
+      "Lista os produtos com estoque baixo (ou esgotados) com base no limite mínimo configurado pela loja.",
+    roles: ["merchant"],
+    inputSchema: {
+      type: "object",
+      properties: {
+        threshold: {
+          type: "number",
+          description: "Limite de unidades opcional (usa configuração da loja por padrão).",
+        },
+      },
+    },
+    execute: async (args, ctx) => {
+      const info = await getStoreWithOwnerMetadata(ctx.storeId);
+      const thresh =
+        args.threshold !== undefined
+          ? Number(args.threshold)
+          : info?.meta?.low_stock_threshold !== undefined
+          ? Number(info.meta.low_stock_threshold)
+          : 3;
+
+      const supabase = getSupabaseAdmin();
+      const { data: prods } = await supabase
+        .from("products")
+        .select("id, name, category, price, stock")
+        .eq("store_id", ctx.storeId)
+        .lte("stock", thresh)
+        .order("stock", { ascending: true });
+
+      return {
+        threshold: thresh,
+        count: (prods || []).length,
+        products: (prods || []).map((p) => ({
+          id: p.id,
+          name: p.name,
+          category: p.category,
+          priceFormatted: formatBRL(p.price),
+          stock: Number(p.stock || 0),
+        })),
       };
     },
   },

@@ -39,6 +39,9 @@ import {
   CalendarClock,
   History,
   CreditCard,
+  ShoppingBag,
+  BarChart3,
+  AlertTriangle,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { formatBRL } from "@/lib/whatsapp";
@@ -61,6 +64,13 @@ import {
   type MerchantChargeItem,
 } from "@/components/admin/MerchantChargesTab";
 import { AdminCopilotWidget } from "@/components/admin/AdminCopilotWidget";
+import {
+  MerchantOrdersTab,
+  type AdminOrderItem,
+} from "@/components/admin/MerchantOrdersTab";
+import { FiadoBillingCard } from "@/components/admin/FiadoBillingCard";
+import { PromotionsTab } from "@/components/admin/PromotionsTab";
+import { ReportsTab } from "@/components/admin/ReportsTab";
 
 interface Store {
   id: string;
@@ -99,9 +109,13 @@ interface Customer {
 
 interface Sale {
   id: string;
+  customer_id?: string | null;
   total_amount: number;
   commission_amount: number;
   payment_method: string;
+  description?: string | null;
+  items?: any;
+  order_status?: string | null;
   created_at: string;
 }
 
@@ -123,7 +137,21 @@ export default function AdminDashboardPage() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [sales, setSales] = useState<Sale[]>([]);
 
-  const [tab, setTab] = useState<"fiado" | "encomendas" | "produtos" | "entrega" | "whatsapp" | "fatura" | "cobrancas">("fiado");
+  const [tab, setTab] = useState<
+    | "pedidos"
+    | "fiado"
+    | "encomendas"
+    | "produtos"
+    | "relatorios"
+    | "promocoes"
+    | "entrega"
+    | "whatsapp"
+    | "fatura"
+    | "cobrancas"
+  >("fiado");
+  const [adminOrders, setAdminOrders] = useState<AdminOrderItem[]>([]);
+  const [adminOrdersLoading, setAdminOrdersLoading] = useState(false);
+  const [lowStockThreshold, setLowStockThreshold] = useState<number>(3);
   const [merchantCharges, setMerchantCharges] = useState<MerchantChargeItem[]>([]);
   const [merchantAccess, setMerchantAccess] = useState<{
     allowed: boolean;
@@ -301,6 +329,11 @@ export default function AdminDashboardPage() {
     setFeaturedProductIds(userMeta.featured_ids || []);
     setDeliveryTime(userMeta.delivery_time || "30min");
     setMinOrder(userMeta.min_order !== undefined ? Number(userMeta.min_order) : 25.0);
+    setLowStockThreshold(
+      userMeta.low_stock_threshold !== undefined
+        ? Number(userMeta.low_stock_threshold)
+        : 3
+    );
 
     const [prodRes, custRes, salesRes] = await Promise.all([
       supabase
@@ -326,8 +359,31 @@ export default function AdminDashboardPage() {
     setLoading(false);
     fetchZapStatus();
     loadEncomendas();
+    loadAdminOrders();
     loadMerchantCharges();
   }
+
+  const loadAdminOrders = async () => {
+    try {
+      setAdminOrdersLoading(true);
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session?.access_token) return;
+
+      const res = await fetch("/api/orders", {
+        headers: { Authorization: `Bearer ${session.access_token}` },
+      });
+      const data = await res.json();
+      if (res.ok && data.ok) {
+        setAdminOrders(data.orders || []);
+      }
+    } catch (e) {
+      console.warn("Erro ao carregar pedidos ao vivo:", e);
+    } finally {
+      setAdminOrdersLoading(false);
+    }
+  };
 
   const loadMerchantCharges = async () => {
     try {
@@ -1170,6 +1226,13 @@ export default function AdminDashboardPage() {
     (acc, s) => acc + Number(s.commission_amount),
     0
   );
+  const openOrdersCount = adminOrders.filter((o) => {
+    const st = String(o.order_status || "RECEBIDO").toUpperCase();
+    return st === "RECEBIDO" || st === "EM_PREPARO" || st === "SAIU_ENTREGA";
+  }).length;
+  const lowStockCount = products.filter(
+    (p) => Number(p.stock || 0) <= lowStockThreshold
+  ).length;
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 pb-32">
@@ -1333,8 +1396,63 @@ export default function AdminDashboardPage() {
               />
             )}
 
+            {(openOrdersCount > 0 || lowStockCount > 0) && (
+              <div className="flex flex-wrap items-center gap-2">
+                {openOrdersCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setTab("pedidos")}
+                    className="inline-flex items-center gap-2 px-3.5 py-2 rounded-2xl bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 text-emerald-800 text-xs font-extrabold transition active:scale-[0.98]"
+                  >
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>
+                      {openOrdersCount} pedido{openOrdersCount > 1 ? "s" : ""} em andamento
+                    </span>
+                  </button>
+                )}
+                {lowStockCount > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setTab("relatorios")}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-800 text-xs font-extrabold transition active:scale-[0.98]"
+                  >
+                    <AlertTriangle className="w-3.5 h-3.5 text-amber-600" />
+                    <span>
+                      {lowStockCount} produto{lowStockCount > 1 ? "s" : ""} com estoque baixo
+                    </span>
+                  </button>
+                )}
+              </div>
+            )}
+
+            {tab === "pedidos" && (
+              <MerchantOrdersTab
+                orders={adminOrders}
+                loading={adminOrdersLoading}
+                onRefresh={async () => {
+                  await loadAdminOrders();
+                  await loadDashboard();
+                }}
+              />
+            )}
+
+            {tab === "relatorios" && (
+              <ReportsTab
+                storeName={store.name}
+                products={products}
+                customers={customers}
+                sales={sales}
+                lowStockThreshold={lowStockThreshold}
+                onThresholdSaved={setLowStockThreshold}
+                onStockUpdated={loadDashboard}
+              />
+            )}
+
+            {tab === "promocoes" && <PromotionsTab />}
+
         {tab === "fiado" && (
           <>
+            <FiadoBillingCard />
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="font-extrabold text-lg text-slate-900 tracking-tight">
@@ -1631,8 +1749,22 @@ export default function AdminDashboardPage() {
                               </span>
                             )}
                           </div>
-                          <p className="text-xs text-slate-500 font-semibold mt-0.5">
-                            <span className="text-emerald-700 font-extrabold">{formatBRL(p.price)}</span> • Estoque: {p.stock} un
+                          <p className="text-xs text-slate-500 font-semibold mt-0.5 flex flex-wrap items-center gap-1.5">
+                            <span className="text-emerald-700 font-extrabold">{formatBRL(p.price)}</span> •{" "}
+                            <span
+                              className={
+                                Number(p.stock || 0) <= lowStockThreshold
+                                  ? "text-rose-600 font-extrabold"
+                                  : ""
+                              }
+                            >
+                              Estoque: {p.stock} un
+                            </span>
+                            {Number(p.stock || 0) <= lowStockThreshold && (
+                              <span className="px-1.5 py-0.5 rounded-md bg-rose-50 text-rose-700 border border-rose-200 text-[10px] font-black">
+                                {Number(p.stock || 0) === 0 ? "Esgotado" : "Baixo"}
+                              </span>
+                            )}
                           </p>
                           <span className="inline-block mt-1 text-[10px] font-bold px-2 py-0.5 rounded-md bg-slate-100 text-slate-600">
                             {p.category}
@@ -2285,11 +2417,31 @@ export default function AdminDashboardPage() {
 
       {/* Floating Bottom Island Dock (Oculto quando bloqueado por cobrança pendente) */}
       {(!(!merchantAccess.allowed && (merchantAccess.financial_blocked || merchantAccess.pending_charges_count > 0))) && (
-      <nav className="fixed bottom-4 inset-x-3 z-40 max-w-2xl mx-auto bg-white/95 backdrop-blur-xl border border-slate-200/80 rounded-[28px] p-1.5 sm:p-2 shadow-2xl shadow-slate-900/10 ring-1 ring-black/5">
-        <div className="grid grid-cols-7 gap-0.5 sm:gap-1">
+      <nav className="fixed bottom-4 inset-x-3 z-40 max-w-3xl mx-auto bg-white/95 backdrop-blur-xl border border-slate-200/80 rounded-[28px] p-1.5 sm:p-2 shadow-2xl shadow-slate-900/10 ring-1 ring-black/5">
+        <div className="flex items-center gap-1 overflow-x-auto no-scrollbar">
+          <button
+            onClick={() => {
+              setTab("pedidos");
+              loadAdminOrders();
+            }}
+            className={`relative min-w-[62px] flex-1 py-2 px-1.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+              tab === "pedidos"
+                ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
+                : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
+            }`}
+          >
+            <div className="relative">
+              <ShoppingBag className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2]" />
+              {openOrdersCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-500 ring-2 ring-white animate-pulse" />
+              )}
+            </div>
+            <span className="text-[9px] sm:text-[11px] truncate">Pedidos</span>
+          </button>
+
           <button
             onClick={() => setTab("fiado")}
-            className={`py-2 px-1 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+            className={`min-w-[62px] flex-1 py-2 px-1.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
               tab === "fiado"
                 ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
                 : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
@@ -2301,7 +2453,7 @@ export default function AdminDashboardPage() {
 
           <button
             onClick={() => setTab("encomendas")}
-            className={`py-2 px-1 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+            className={`min-w-[64px] flex-1 py-2 px-1.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
               tab === "encomendas"
                 ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
                 : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
@@ -2313,7 +2465,7 @@ export default function AdminDashboardPage() {
 
           <button
             onClick={() => setTab("produtos")}
-            className={`py-2 px-1 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+            className={`min-w-[62px] flex-1 py-2 px-1.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
               tab === "produtos"
                 ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
                 : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
@@ -2324,8 +2476,37 @@ export default function AdminDashboardPage() {
           </button>
 
           <button
+            onClick={() => setTab("relatorios")}
+            className={`relative min-w-[64px] flex-1 py-2 px-1.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+              tab === "relatorios"
+                ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
+                : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
+            }`}
+          >
+            <div className="relative">
+              <BarChart3 className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2]" />
+              {lowStockCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-amber-500 ring-2 ring-white" />
+              )}
+            </div>
+            <span className="text-[9px] sm:text-[11px] truncate">Relatórios</span>
+          </button>
+
+          <button
+            onClick={() => setTab("promocoes")}
+            className={`min-w-[62px] flex-1 py-2 px-1.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+              tab === "promocoes"
+                ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
+                : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
+            }`}
+          >
+            <Tag className="w-4 h-4 sm:w-5 sm:h-5 stroke-[2]" />
+            <span className="text-[9px] sm:text-[11px] truncate">Cupons</span>
+          </button>
+
+          <button
             onClick={() => setTab("entrega")}
-            className={`py-2 px-1 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+            className={`min-w-[56px] flex-1 py-2 px-1.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
               tab === "entrega"
                 ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
                 : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
@@ -2340,7 +2521,7 @@ export default function AdminDashboardPage() {
               setTab("whatsapp");
               fetchZapStatus();
             }}
-            className={`relative py-2 px-1 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+            className={`relative min-w-[62px] flex-1 py-2 px-1.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
               tab === "whatsapp"
                 ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
                 : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
@@ -2359,7 +2540,7 @@ export default function AdminDashboardPage() {
 
           <button
             onClick={() => setTab("fatura")}
-            className={`py-2 px-1 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+            className={`min-w-[56px] flex-1 py-2 px-1.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
               tab === "fatura"
                 ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
                 : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
@@ -2371,7 +2552,7 @@ export default function AdminDashboardPage() {
 
           <button
             onClick={() => setTab("cobrancas")}
-            className={`relative py-2 px-1 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
+            className={`relative min-w-[62px] flex-1 py-2 px-1.5 rounded-2xl flex flex-col items-center justify-center gap-1 transition-all duration-200 ${
               tab === "cobrancas"
                 ? "bg-emerald-50 text-emerald-700 font-extrabold shadow-xs"
                 : "text-slate-400 hover:text-slate-600 hover:bg-slate-50 font-semibold"
@@ -2396,6 +2577,7 @@ export default function AdminDashboardPage() {
           onDataChanged={() => {
             loadDashboard();
             loadEncomendas();
+            loadAdminOrders();
           }}
         />
       )}

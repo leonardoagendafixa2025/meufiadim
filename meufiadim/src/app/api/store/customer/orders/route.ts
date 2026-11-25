@@ -2,11 +2,18 @@ import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/encomendas";
 import { cleanPhone, formatPhoneBR } from "@/lib/customer-auth";
 import { formatBRL, getZapApiUrl, getZapApiKey } from "@/lib/whatsapp";
+import {
+  DEFAULT_LOYALTY_CONFIG,
+  computeOrderDiscounts,
+  normalizeOrderStatus,
+  type LoyaltyConfig,
+  type StoreCoupon,
+} from "@/lib/store-features";
 
 export const dynamic = "force-dynamic";
 
 /**
- * GET: Retorna o histórico de compras e encomendas do cliente na loja informada.
+ * GET: Retorna histórico de compras, status ao vivo, pontos de fidelidade e encomendas.
  */
 export async function GET(req: Request) {
   try {
@@ -23,6 +30,18 @@ export async function GET(req: Request) {
     }
 
     const supabase = getSupabaseAdmin();
+
+    const { data: storeRow } = await supabase
+      .from("stores")
+      .select("id, owner_id")
+      .eq("id", storeId)
+      .maybeSingle();
+
+    let ownerMeta: Record<string, any> = {};
+    if (storeRow?.owner_id) {
+      const { data: ownerData } = await supabase.auth.admin.getUserById(storeRow.owner_id);
+      ownerMeta = ownerData?.user?.user_metadata || {};
+    }
 
     // 1. Buscar dados do cliente
     let query = supabase.from("customers").select("*").eq("store_id", storeId);
@@ -64,6 +83,37 @@ export async function GET(req: Request) {
       .eq("customer_id", customer.id)
       .order("created_at", { ascending: false });
 
+    const statusFallbackMap: Record<string, string> = ownerMeta.order_statuses || {};
+    const detailsFallbackMap: Record<string, any> = ownerMeta.order_details || {};
+    const enrichedSales = (sales || []).map((s: any) => {
+      const details = detailsFallbackMap[s.id] || {};
+      return {
+        ...s,
+        order_status: normalizeOrderStatus(s.order_status || statusFallbackMap[s.id] || "RECEBIDO"),
+        delivery_type: s.delivery_type || details.delivery_type || null,
+        coupon_code: s.coupon_code || details.coupon_code || null,
+        discount_amount:
+          s.discount_amount !== undefined
+            ? Number(s.discount_amount)
+            : Number(details.discount_amount || 0),
+        loyalty_reward_used:
+          s.loyalty_reward_used !== undefined
+            ? Number(s.loyalty_reward_used)
+            : Number(details.loyalty_reward_used || 0),
+      };
+    });
+
+    const loyaltyConfig: LoyaltyConfig = {
+      ...DEFAULT_LOYALTY_CONFIG,
+      ...(ownerMeta.loyalty_config || {}),
+    };
+    const metaPointsMap: Record<string, number> = ownerMeta.customer_loyalty_points || {};
+    const customerLoyaltyPoints = Number(
+      customer.loyalty_points !== undefined && customer.loyalty_points !== null
+        ? customer.loyalty_points
+        : metaPointsMap[customer.id] || 0
+    );
+
     return NextResponse.json({
       success: true,
       customer: {
@@ -73,8 +123,10 @@ export async function GET(req: Request) {
         balance: customer.balance || 0,
         credit_limit: customer.credit_limit || 0,
         due_date: customer.due_date,
+        loyalty_points: customerLoyaltyPoints,
       },
-      sales: sales || [],
+      loyaltyConfig,
+      sales: enrichedSales,
       encomendas: encErr ? [] : encomendas || [],
     });
   } catch (error: any) {
@@ -86,7 +138,7 @@ export async function GET(req: Request) {
 }
 
 /**
- * POST: Registra o pedido/venda na vitrine vinculado ao cliente autenticado.
+ * POST: Registra pedido da vitrine com validação server-side de cupom, fidelidade e estoque.
  */
 export async function POST(req: Request) {
   try {
@@ -102,9 +154,11 @@ export async function POST(req: Request) {
       freightFee,
       address,
       notes,
+      couponCode,
+      redeemLoyalty,
     } = body;
 
-    if (!storeId || !customerId || !totalAmount) {
+    if (!storeId || !customerId || (!totalAmount && (!Array.isArray(items) || items.length === 0))) {
       return NextResponse.json(
         { error: "Dados incompletos para registrar o pedido." },
         { status: 400 }
@@ -113,10 +167,10 @@ export async function POST(req: Request) {
 
     const supabase = getSupabaseAdmin();
 
-    // 1. Validar loja e status de abertura
+    // 1. Validar loja
     const { data: store, error: storeErr } = await supabase
       .from("stores")
-      .select("id, name, whatsapp, pix_key, pix_city, commission_rate, is_open, status")
+      .select("id, owner_id, name, whatsapp, pix_key, pix_city, commission_rate, is_open, status")
       .eq("id", storeId)
       .maybeSingle();
 
@@ -131,7 +185,17 @@ export async function POST(req: Request) {
       );
     }
 
-    if (store.is_open === false) {
+    // Verifica abertura em user_metadata + stores.is_open
+    let ownerUser: any = null;
+    if (store.owner_id) {
+      const { data: ownerData } = await supabase.auth.admin.getUserById(store.owner_id);
+      ownerUser = ownerData?.user || null;
+    }
+    const ownerMeta: Record<string, any> = ownerUser?.user_metadata || {};
+    const storeOpen =
+      ownerMeta.is_open !== undefined ? Boolean(ownerMeta.is_open) : store.is_open !== false;
+
+    if (!storeOpen) {
       return NextResponse.json(
         { error: "A loja está fechada no momento e não está aceitando novos pedidos." },
         { status: 400 }
@@ -141,7 +205,7 @@ export async function POST(req: Request) {
     // 2. Validar cliente
     const { data: customer, error: custErr } = await supabase
       .from("customers")
-      .select("id, name, phone, balance, credit_limit")
+      .select("*")
       .eq("id", customerId)
       .eq("store_id", storeId)
       .maybeSingle();
@@ -153,11 +217,100 @@ export async function POST(req: Request) {
       );
     }
 
-    const parsedTotal = Number(Number(totalAmount).toFixed(2));
+    // 3. Recalcular subtotal com preços oficiais do catálogo no servidor
+    let authoritativeItemsSubtotal = 0;
+    const storeProductsMap = new Map<string, any>();
+
+    if (Array.isArray(items) && items.length > 0) {
+      const { data: dbProducts } = await supabase
+        .from("products")
+        .select("id, name, price, stock")
+        .eq("store_id", storeId);
+
+      for (const p of dbProducts || []) {
+        storeProductsMap.set(p.id, p);
+      }
+
+      for (const item of items) {
+        const qty = Math.max(1, Math.round(Number(item.qty || 1)));
+        const dbProd = item.id ? storeProductsMap.get(item.id) : null;
+        const unitPrice = dbProd ? Number(dbProd.price) : Math.max(0, Number(item.price || 0));
+        authoritativeItemsSubtotal += unitPrice * qty;
+      }
+      authoritativeItemsSubtotal = Number(authoritativeItemsSubtotal.toFixed(2));
+    }
+
+    // 4. Carregar cupons e fidelidade da loja para cálculo server-side
+    const parsedFreight = deliveryType === "retirada" ? 0 : Math.max(0, Number(freightFee || 0));
+    let coupons: StoreCoupon[] = ownerMeta.store_coupons || [];
+    const { data: dbCoupons, error: dbCouponsErr } = await supabase
+      .from("store_coupons")
+      .select("*")
+      .eq("store_id", storeId);
+
+    if (!dbCouponsErr && dbCoupons && dbCoupons.length > 0) {
+      coupons = dbCoupons.map((c: any) => ({
+        id: c.id,
+        code: c.code,
+        discountType: c.discount_type,
+        discountValue: Number(c.discount_value),
+        minOrder: Number(c.min_order || 0),
+        active: Boolean(c.active),
+        usesCount: Number(c.uses_count || 0),
+      }));
+    }
+
+    let matchedCoupon: StoreCoupon | null = null;
+    if (couponCode && String(couponCode).trim()) {
+      const normCode = String(couponCode).trim().toUpperCase();
+      matchedCoupon = coupons.find((c) => c.code.toUpperCase() === normCode) || null;
+      if (!matchedCoupon) {
+        return NextResponse.json(
+          { error: `Cupom "${normCode}" não encontrado ou expirado.` },
+          { status: 400 }
+        );
+      }
+    }
+
+    const loyaltyConfig: LoyaltyConfig = {
+      ...DEFAULT_LOYALTY_CONFIG,
+      ...(ownerMeta.loyalty_config || {}),
+    };
+    const metaPointsMap: Record<string, number> = {
+      ...(ownerMeta.customer_loyalty_points || {}),
+    };
+    const currentPoints = Number(
+      customer.loyalty_points !== undefined && customer.loyalty_points !== null
+        ? customer.loyalty_points
+        : metaPointsMap[customer.id] || 0
+    );
+
+    const effectiveSubtotal =
+      authoritativeItemsSubtotal > 0
+        ? authoritativeItemsSubtotal
+        : Math.max(0, Number(totalAmount) - parsedFreight);
+
+    const discountCalc = computeOrderDiscounts({
+      subtotal: effectiveSubtotal,
+      freightFee: parsedFreight,
+      coupon: matchedCoupon,
+      loyaltyConfig,
+      customerPoints: currentPoints,
+      redeemLoyalty: Boolean(redeemLoyalty),
+    });
+
+    if (discountCalc.couponError) {
+      return NextResponse.json({ error: discountCalc.couponError }, { status: 400 });
+    }
+
+    const parsedTotal =
+      authoritativeItemsSubtotal > 0 || discountCalc.totalDiscount > 0
+        ? discountCalc.finalTotal
+        : Number(Number(totalAmount).toFixed(2));
+
     const commissionRate = Number(store.commission_rate || 5.0);
     const commissionAmount = Number(((parsedTotal * commissionRate) / 100).toFixed(2));
 
-    // Montar descrição legível caso não venha pronta
     let formattedDescription = description || "";
     if (!formattedDescription && Array.isArray(items)) {
       formattedDescription = items
@@ -165,10 +318,11 @@ export async function POST(req: Request) {
         .join(" • ");
     }
 
-    // 3. Inserir a venda
-    // Tentamos com description e items; se as colunas ainda não existirem no Supabase, fazemos fallback transparente
+    const pointsEarned = loyaltyConfig.enabled ? 1 : 0;
+
+    // 5. Inserir venda com colunas completas (e fallback transparente se SQL v3 ainda não foi executado)
     let saleRecord: any = null;
-    const insertPayloadWithCols: any = {
+    const fullInsertPayload: any = {
       store_id: storeId,
       customer_id: customer.id,
       total_amount: parsedTotal,
@@ -176,36 +330,58 @@ export async function POST(req: Request) {
       payment_method: paymentMethod || "Pix",
       description: formattedDescription,
       items: items || null,
+      order_status: "RECEBIDO",
+      status_updated_at: new Date().toISOString(),
+      delivery_type: deliveryType || null,
+      delivery_address: address || null,
+      notes: notes ? String(notes).trim() : null,
+      coupon_code: discountCalc.appliedCouponCode,
+      discount_amount: discountCalc.couponDiscount,
+      loyalty_points_earned: pointsEarned,
+      loyalty_reward_used: discountCalc.loyaltyRewardUsed,
     };
 
     const { data: saleData, error: saleErr } = await supabase
       .from("sales")
-      .insert(insertPayloadWithCols)
+      .insert(fullInsertPayload)
       .select()
       .single();
 
     if (saleErr) {
-      // Fallback sem colunas novas caso a migration ainda esteja sendo executada
       if (saleErr.message?.includes("column") || saleErr.code === "42703") {
-        const { data: fallbackSale, error: fallbackErr } = await supabase
-          .from("sales")
-          .insert({
-            store_id: storeId,
-            customer_id: customer.id,
-            total_amount: parsedTotal,
-            commission_amount: commissionAmount,
-            payment_method: paymentMethod || "Pix",
-          })
-          .select()
-          .single();
-
-        if (fallbackErr) {
-          return NextResponse.json(
-            { error: "Erro ao registrar venda: " + fallbackErr.message },
-            { status: 500 }
-          );
+        // Fallback preservando description & items se já existirem ou núcleo mínimo
+        const corePayload: any = {
+          store_id: storeId,
+          customer_id: customer.id,
+          total_amount: parsedTotal,
+          commission_amount: commissionAmount,
+          payment_method: paymentMethod || "Pix",
+          description: formattedDescription,
+          items: items || null,
+        };
+        const resCore = await supabase.from("sales").insert(corePayload).select().single();
+        if (resCore.error) {
+          const minRes = await supabase
+            .from("sales")
+            .insert({
+              store_id: storeId,
+              customer_id: customer.id,
+              total_amount: parsedTotal,
+              commission_amount: commissionAmount,
+              payment_method: paymentMethod || "Pix",
+            })
+            .select()
+            .single();
+          if (minRes.error) {
+            return NextResponse.json(
+              { error: "Erro ao registrar venda: " + minRes.error.message },
+              { status: 500 }
+            );
+          }
+          saleRecord = minRes.data;
+        } else {
+          saleRecord = resCore.data;
         }
-        saleRecord = fallbackSale;
       } else {
         return NextResponse.json(
           { error: "Erro ao registrar venda: " + saleErr.message },
@@ -216,38 +392,110 @@ export async function POST(req: Request) {
       saleRecord = saleData;
     }
 
-    // 4. Se a forma de pagamento for FIADO, somar ao saldo devedor do cliente
-    if (paymentMethod === "Fiado") {
-      const currentBalance = Number(customer.balance || 0);
-      const newBalance = Number((currentBalance + parsedTotal).toFixed(2));
+    // 6. Baixa automática de estoque dos produtos comprados
+    if (Array.isArray(items) && items.length > 0) {
+      for (const item of items) {
+        const dbProd = item.id ? storeProductsMap.get(item.id) : null;
+        if (dbProd) {
+          const qty = Math.max(1, Math.round(Number(item.qty || 1)));
+          const nextStock = Math.max(0, Number(dbProd.stock || 0) - qty);
+          await supabase
+            .from("products")
+            .update({ stock: nextStock })
+            .eq("id", dbProd.id)
+            .eq("store_id", storeId);
+        }
+      }
+    }
 
+    // 7. Atualiza saldo devedor (se Fiado) e pontos de fidelidade do cliente
+    const nextBalance =
+      paymentMethod === "Fiado"
+        ? Number((Number(customer.balance || 0) + parsedTotal).toFixed(2))
+        : Number(customer.balance || 0);
+
+    const nextPoints =
+      Math.max(0, currentPoints - discountCalc.pointsRedeemed) + pointsEarned;
+
+    const custUpdateRes = await supabase
+      .from("customers")
+      .update({
+        ...(paymentMethod === "Fiado" ? { balance: nextBalance } : {}),
+        loyalty_points: nextPoints,
+      })
+      .eq("id", customer.id);
+
+    if (custUpdateRes.error && paymentMethod === "Fiado") {
       await supabase
         .from("customers")
-        .update({
-          balance: newBalance,
-        })
+        .update({ balance: nextBalance })
         .eq("id", customer.id);
     }
 
-    // 5. Disparo automático via Baileys (WhatsApp Bot API) para Lojista e Cliente
+    // 8. Espelhar status/detalhes/fidelidade/cupons no metadata do dono (zero risco de perda antes do SQL v3)
+    if (ownerUser) {
+      const updatedStatuses = {
+        ...(ownerMeta.order_statuses || {}),
+        [saleRecord.id]: "RECEBIDO",
+      };
+      const updatedDetails = {
+        ...(ownerMeta.order_details || {}),
+        [saleRecord.id]: {
+          delivery_type: deliveryType || null,
+          delivery_address: address || null,
+          notes: notes ? String(notes).trim() : null,
+          coupon_code: discountCalc.appliedCouponCode,
+          discount_amount: discountCalc.couponDiscount,
+          loyalty_reward_used: discountCalc.loyaltyRewardUsed,
+        },
+      };
+
+      const nextCoupons = (ownerMeta.store_coupons || []).map((c: StoreCoupon) =>
+        discountCalc.appliedCouponCode &&
+        c.code.toUpperCase() === discountCalc.appliedCouponCode
+          ? { ...c, usesCount: Number(c.usesCount || 0) + 1 }
+          : c
+      );
+
+      metaPointsMap[customer.id] = nextPoints;
+
+      await supabase.auth.admin.updateUserById(ownerUser.id, {
+        user_metadata: {
+          ...ownerMeta,
+          order_statuses: updatedStatuses,
+          order_details: updatedDetails,
+          customer_loyalty_points: metaPointsMap,
+          store_coupons: nextCoupons,
+        },
+      });
+    }
+
+    if (discountCalc.appliedCouponCode && !dbCouponsErr) {
+      await supabase
+        .from("store_coupons")
+        .update({ uses_count: Number(matchedCoupon?.usesCount || 0) + 1 })
+        .eq("store_id", storeId)
+        .eq("code", discountCalc.appliedCouponCode);
+    }
+
+    // 9. Disparo automático via Baileys
     const zapUrl = getZapApiUrl();
     const zapKey = getZapApiKey();
     let merchantNotified = false;
     let customerNotified = false;
 
-    const itemsLines = Array.isArray(items) && items.length > 0
-      ? items
-          .map(
-            (i: any) =>
-              `• ${i.qty}x ${i.name || i.product?.name || "Item"} — ${formatBRL(Number(i.price || 0) * Number(i.qty || 1))}`
-          )
-          .join("\n")
-      : formattedDescription;
+    const itemsLines =
+      Array.isArray(items) && items.length > 0
+        ? items
+            .map(
+              (i: any) =>
+                `• ${i.qty}x ${i.name || i.product?.name || "Item"} — ${formatBRL(
+                  Number(i.price || 0) * Number(i.qty || 1)
+                )}`
+            )
+            .join("\n")
+        : formattedDescription;
 
-    const parsedFreight = Number(freightFee || 0);
-    const parsedSubtotal = Number(Math.max(0, parsedTotal - (deliveryType === "retirada" ? 0 : parsedFreight)).toFixed(2));
-
-    // 5a. Notificar Lojista automaticamente
     if (store.whatsapp) {
       try {
         const merchantLines = [
@@ -256,18 +504,29 @@ export async function POST(req: Request) {
           `👤 *Cliente:* ${customer.name}`,
           `📱 *WhatsApp:* ${formatPhoneBR(customer.phone)}`,
           `🛵 *Modalidade:* ${deliveryType === "retirada" ? "RETIRADA NA LOJA" : "ENTREGA EM DOMICÍLIO"}`,
-          address ? address : (deliveryType === "retirada" ? "🏬 Retirada no balcão da loja" : ""),
+          address ? address : deliveryType === "retirada" ? "🏬 Retirada no balcão da loja" : "",
           `💳 *Forma de Pagamento:* ${paymentMethod || "Pix"}`,
           ``,
           `📋 *ITENS DO PEDIDO:*`,
           itemsLines,
           ``,
-          `Subtotal: ${formatBRL(parsedSubtotal)}`,
+          `Subtotal: ${formatBRL(discountCalc.subtotal)}`,
           deliveryType === "retirada"
             ? `Frete: Grátis (Retirada)`
             : `Taxa de Entrega: ${formatBRL(parsedFreight)}`,
-          `💰 *VALOR TOTAL: ${formatBRL(parsedTotal)}*`,
         ];
+
+        if (discountCalc.couponDiscount > 0) {
+          merchantLines.push(
+            `🏷️ Cupom ${discountCalc.appliedCouponCode}: -${formatBRL(discountCalc.couponDiscount)}`
+          );
+        }
+        if (discountCalc.loyaltyRewardUsed > 0) {
+          merchantLines.push(
+            `🎁 Prêmio Fidelidade: -${formatBRL(discountCalc.loyaltyRewardUsed)}`
+          );
+        }
+        merchantLines.push(`💰 *VALOR TOTAL: ${formatBRL(parsedTotal)}*`);
 
         if (notes && String(notes).trim()) {
           merchantLines.push(``, `📝 *Observações:* ${String(notes).trim()}`);
@@ -291,7 +550,6 @@ export async function POST(req: Request) {
       }
     }
 
-    // 5b. Enviar confirmação automática ao Cliente (com Pix Copia e Cola se pagamento for Pix e loja tiver chave)
     if (customer.phone) {
       try {
         const firstName = customer.name.split(" ")[0];
@@ -308,10 +566,22 @@ export async function POST(req: Request) {
           `🛵 *Modalidade:* ${deliveryType === "retirada" ? "Retirada na loja" : "Entrega em domicílio"}`,
         ];
 
+        if (loyaltyConfig.enabled) {
+          customerLines.push(
+            `⭐ *Fidelidade:* Você agora tem *${nextPoints}/${loyaltyConfig.targetOrders}* carimbos!`
+          );
+        }
+
         if (paymentMethod === "Pix" && store.pix_key) {
-          customerLines.push(``, `Para pagar agora, toque em *"Copiar código Pix"* na mensagem abaixo 👇`);
+          customerLines.push(
+            ``,
+            `Para pagar agora, toque em *"Copiar código Pix"* na mensagem abaixo 👇`
+          );
         } else {
-          customerLines.push(``, `Você pode acompanhar seu histórico de compras a qualquer momento na vitrine da loja. Obrigado pela preferência!`);
+          customerLines.push(
+            ``,
+            `Acompanhe o preparo do seu pedido ao vivo direto pela vitrine da loja. Obrigado pela preferência!`
+          );
         }
 
         const resCustomer = await fetch(`${zapUrl}/send`, {
@@ -344,7 +614,9 @@ export async function POST(req: Request) {
     return NextResponse.json({
       success: true,
       message: "Pedido registrado com sucesso!",
-      sale: saleRecord,
+      sale: { ...saleRecord, order_status: "RECEBIDO" },
+      finalTotal: parsedTotal,
+      loyaltyPoints: nextPoints,
       merchantNotified,
       customerNotified,
     });

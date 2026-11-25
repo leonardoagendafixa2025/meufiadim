@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/encomendas/cron",
+      "schedule": "0 12 * * *"
+    },
+    {
+      "path": "/api/fiado/cron",
+      "schedule": "0 12 * * *"
+    }
+  ]
+}
