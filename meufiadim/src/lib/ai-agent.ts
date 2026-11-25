@@ -517,17 +517,13 @@ export async function runAiAgent(params: {
   };
 
   if (geminiKey) {
-    const attempts: Array<{ model: string; endpointBase: "vertex" | "aistudio" }> =
-      geminiKey.startsWith("AQ.")
-        ? [
-            { model: "gemini-2.5-flash", endpointBase: "vertex" },
-            { model: "gemini-2.0-flash", endpointBase: "vertex" },
-            { model: "gemini-2.5-flash", endpointBase: "aistudio" },
-          ]
-        : [
-            { model: "gemini-2.5-flash", endpointBase: "aistudio" },
-            { model: "gemini-2.0-flash", endpointBase: "aistudio" },
-          ];
+    const attempts: Array<{ model: string; endpointBase: "vertex" | "aistudio" }> = [
+      { model: "gemini-3.8-flash", endpointBase: "aistudio" },
+      ...(geminiKey.startsWith("AQ.")
+        ? [{ model: "gemini-3.8-flash", endpointBase: "vertex" as const }]
+        : []),
+      { model: "gemini-2.5-flash", endpointBase: "aistudio" },
+    ];
 
     for (const attempt of attempts) {
       try {
@@ -546,6 +542,38 @@ export async function runAiAgent(params: {
         lastErrorDetail = `${attempt.endpointBase}/${attempt.model}: ${sanitizeError(err)}`;
         console.warn(`⚠️ Falha na chamada Gemini (${lastErrorDetail})`);
       }
+    }
+
+    // Descobre automaticamente modelos flash ativos caso a Google atualize nomes de versão
+    try {
+      const listRes = await fetch("https://generativelanguage.googleapis.com/v1beta/models", {
+        headers: { "x-goog-api-key": geminiKey },
+      });
+      if (listRes.ok) {
+        const listData = await listRes.json();
+        const candidateModel = (listData.models || []).find(
+          (m: any) =>
+            String(m.name || "").includes("flash") &&
+            Array.isArray(m.supportedGenerationMethods) &&
+            m.supportedGenerationMethods.includes("generateContent")
+        );
+        if (candidateModel?.name) {
+          const cleanModel = String(candidateModel.name).replace(/^models\//, "");
+          const res = await runWithGemini({
+            apiKey: geminiKey,
+            model: cleanModel,
+            endpointBase: "aistudio",
+            message,
+            history,
+            ctx,
+            storeName,
+          });
+          return { ...res, aiDiagnostic: "active" };
+        }
+      }
+    } catch (discErr) {
+      hadApiError = true;
+      lastErrorDetail += ` | discovery: ${sanitizeError(discErr)}`;
     }
   }
 
