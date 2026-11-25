@@ -89,6 +89,11 @@ export async function GET() {
     },
     aiEngine: {
       geminiConfigured: Boolean((process.env.GEMINI_API_KEY || "").trim()),
+      geminiKeyType: (process.env.GEMINI_API_KEY || "").trim().startsWith("AQ.")
+        ? "vertex-express"
+        : (process.env.GEMINI_API_KEY || "").trim()
+        ? "ai-studio"
+        : "none",
       openaiConfigured: Boolean((process.env.OPENAI_API_KEY || "").trim()),
     },
     merchantTools: getToolsForRole("merchant").map((t) => ({

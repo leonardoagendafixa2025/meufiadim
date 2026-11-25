@@ -109,9 +109,14 @@ async function runWithGemini(params: {
   }));
   contents.push({ role: "user", parts: [{ text: message }] });
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(
-    apiKey
-  )}`;
+  const isVertexExpressKey = apiKey.startsWith("AQ.");
+  const endpoint = isVertexExpressKey
+    ? `https://aiplatform.googleapis.com/v1/publishers/google/models/${model}:generateContent?key=${encodeURIComponent(
+        apiKey
+      )}`
+    : `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(
+        apiKey
+      )}`;
 
   for (let round = 0; round < 4; round++) {
     const res = await fetch(endpoint, {
