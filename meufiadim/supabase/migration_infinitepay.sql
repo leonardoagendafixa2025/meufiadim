@@ -206,7 +206,7 @@ BEGIN
   WHERE merchant_id = p_merchant_id
     AND status IN ('pending', 'expired');
 
-  IF v_pending_count > 0 OR v_store.financial_blocked THEN
+  IF v_store.financial_blocked THEN
     RETURN jsonb_build_object(
       'allowed', false,
       'reason', 'Seu acesso está temporariamente bloqueado devido a uma cobrança pendente. Para voltar a utilizar o MEU FIADIM, realize o pagamento abaixo. Após a confirmação, seu acesso será liberado automaticamente.',
@@ -220,7 +220,7 @@ BEGIN
     RETURN jsonb_build_object(
       'allowed', false,
       'reason', 'Seu acesso está temporariamente suspenso pela administração do MEU FIADIM.',
-      'pending_charges_count', 0,
+      'pending_charges_count', v_pending_count,
       'financial_blocked', false,
       'admin_blocked', true
     );
@@ -229,7 +229,7 @@ BEGIN
   RETURN jsonb_build_object(
     'allowed', true,
     'reason', null,
-    'pending_charges_count', 0,
+    'pending_charges_count', v_pending_count,
     'financial_blocked', false,
     'admin_blocked', false
   );

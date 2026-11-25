@@ -54,32 +54,24 @@ export async function authenticateMerchant(req: Request) {
 
 /**
  * Função centralizada que determina se o lojista pode acessar operacionalmente o sistema.
- * Utiliza a função SQL `can_merchant_access_system` com fallback seguro caso a RPC não exista ainda.
+ * Respeita tanto bloqueio financeiro (financial_blocked) quanto bloqueio manual (admin_blocked),
+ * permitindo que o Super Admin libere manualmente uma loja mesmo mantendo cobranças pendentes em aberto.
  */
 export async function canMerchantAccessSystem(merchantId: string) {
   const supabase = getSupabaseAdmin();
 
-  const { data: rpcData, error: rpcErr } = await supabase.rpc(
-    "can_merchant_access_system",
-    { p_merchant_id: merchantId }
-  );
-
-  if (!rpcErr && rpcData) {
-    return rpcData as {
-      allowed: boolean;
-      reason: string | null;
-      pending_charges_count: number;
-      financial_blocked: boolean;
-      admin_blocked: boolean;
-    };
-  }
-
-  // Fallback seguro direto no banco
-  const { data: store } = await supabase
-    .from("stores")
-    .select("id, status, admin_blocked, financial_blocked")
-    .eq("id", merchantId)
-    .maybeSingle();
+  const [{ data: store }, { count }] = await Promise.all([
+    supabase
+      .from("stores")
+      .select("id, status, admin_blocked, financial_blocked")
+      .eq("id", merchantId)
+      .maybeSingle(),
+    supabase
+      .from("merchant_charges")
+      .select("id", { count: "exact", head: true })
+      .eq("merchant_id", merchantId)
+      .in("status", ["pending", "expired"]),
+  ]);
 
   if (!store) {
     return {
@@ -91,14 +83,9 @@ export async function canMerchantAccessSystem(merchantId: string) {
     };
   }
 
-  const { count } = await supabase
-    .from("merchant_charges")
-    .select("id", { count: "exact", head: true })
-    .eq("merchant_id", merchantId)
-    .in("status", ["pending", "expired"]);
-
   const pendingCount = count || 0;
-  if (pendingCount > 0 || store.financial_blocked) {
+
+  if (store.financial_blocked) {
     return {
       allowed: false,
       reason:
@@ -113,7 +100,7 @@ export async function canMerchantAccessSystem(merchantId: string) {
     return {
       allowed: false,
       reason: "Seu acesso está temporariamente suspenso pela administração do MEU FIADIM.",
-      pending_charges_count: 0,
+      pending_charges_count: pendingCount,
       financial_blocked: false,
       admin_blocked: true,
     };
@@ -122,7 +109,7 @@ export async function canMerchantAccessSystem(merchantId: string) {
   return {
     allowed: true,
     reason: null,
-    pending_charges_count: 0,
+    pending_charges_count: pendingCount,
     financial_blocked: false,
     admin_blocked: false,
   };

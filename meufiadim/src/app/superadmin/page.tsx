@@ -71,6 +71,8 @@ interface StoreItem {
   commission_rate: number;
   billing_cycle: "weekly" | "monthly";
   status: "active" | "blocked";
+  admin_blocked?: boolean;
+  financial_blocked?: boolean;
   created_at: string;
   metrics: StoreMetrics;
 }
@@ -187,6 +189,14 @@ export default function SuperAdminPage() {
   const [savingStoreId, setSavingStoreId] = useState<string | null>(null);
   const [deleteConfirmStore, setDeleteConfirmStore] = useState<StoreItem | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [unblockChoiceModal, setUnblockChoiceModal] = useState<{
+    storeId: string;
+    storeName: string;
+    pendingCount: number;
+    pendingTotalCents: number;
+    extraPatch?: Record<string, any>;
+  } | null>(null);
+  const [unblockingMode, setUnblockingMode] = useState<string | null>(null);
 
   // Modal: Cadastrar Nova Loja
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -1044,6 +1054,17 @@ export default function SuperAdminPage() {
       const token = await getAccessToken();
       if (!token) throw new Error("Sessão expirada.");
 
+      const patchPayload = {
+        name: editName.trim(),
+        slug: editSlug.trim(),
+        whatsapp: editWhatsapp.replace(/\D/g, ""),
+        pix_key: editPixKey.trim() || null,
+        pix_city: editPixCity.trim() || "BRASILIA",
+        commission_rate: Number(editCommission) || 5.0,
+        billing_cycle: editCycle,
+        status: editStatus,
+      };
+
       const res = await fetch("/api/superadmin/store", {
         method: "PATCH",
         headers: {
@@ -1052,21 +1073,24 @@ export default function SuperAdminPage() {
         },
         body: JSON.stringify({
           storeId: editingStore.id,
-          patch: {
-            name: editName.trim(),
-            slug: editSlug.trim(),
-            whatsapp: editWhatsapp.replace(/\D/g, ""),
-            pix_key: editPixKey.trim() || null,
-            pix_city: editPixCity.trim() || "BRASILIA",
-            commission_rate: Number(editCommission) || 5.0,
-            billing_cycle: editCycle,
-            status: editStatus,
-          },
+          patch: patchPayload,
         }),
       });
 
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Erro ao salvar alterações.");
+
+      if (data.requiresUnblockChoice) {
+        setEditingStore(null);
+        setUnblockChoiceModal({
+          storeId: editingStore.id,
+          storeName: data.storeName || editingStore.name,
+          pendingCount: data.pendingCount || 1,
+          pendingTotalCents: data.pendingTotalCents || 0,
+          extraPatch: patchPayload,
+        });
+        return;
+      }
 
       showToast("Dados da loja atualizados com sucesso!");
       setEditingStore(null);
@@ -1136,14 +1160,64 @@ export default function SuperAdminPage() {
         }),
       });
 
-      if (!res.ok) throw new Error("Falha ao alterar status.");
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Falha ao alterar status.");
 
-      showToast(newStatus === "active" ? "Loja ativada!" : "Loja bloqueada!");
+      if (data.requiresUnblockChoice) {
+        setUnblockChoiceModal({
+          storeId: id,
+          storeName: data.storeName || "Loja",
+          pendingCount: data.pendingCount || 1,
+          pendingTotalCents: data.pendingTotalCents || 0,
+        });
+        return;
+      }
+
+      showToast(data.store?.status === "active" ? "Loja liberada com sucesso!" : "Loja bloqueada!");
       await loadPlatformData();
     } catch (err: any) {
       showToast(err.message, "error");
     } finally {
       setSavingStoreId(null);
+    }
+  }
+
+  async function handleConfirmUnblockChoice(mode: "keep_charges" | "cancel_charges") {
+    if (!unblockChoiceModal) return;
+    try {
+      setUnblockingMode(mode);
+      const token = await getAccessToken();
+      if (!token) throw new Error("Sessão expirada.");
+
+      const res = await fetch("/api/superadmin/store", {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          storeId: unblockChoiceModal.storeId,
+          patch: { ...(unblockChoiceModal.extraPatch || {}), status: "active" },
+          unblockMode: mode,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.ok) {
+        throw new Error(data.error || "Não foi possível liberar a loja.");
+      }
+
+      showToast(
+        mode === "cancel_charges"
+          ? `Cobranças pendentes canceladas e loja "${unblockChoiceModal.storeName}" liberada!`
+          : `Loja "${unblockChoiceModal.storeName}" liberada manualmente (cobrança mantida em aberto)!`
+      );
+      setUnblockChoiceModal(null);
+      await loadPlatformData();
+    } catch (err: any) {
+      showToast(err.message, "error");
+    } finally {
+      setUnblockingMode(null);
     }
   }
 
@@ -1548,7 +1622,11 @@ export default function SuperAdminPage() {
                                 s.status === "active" ? "bg-emerald-500" : "bg-rose-500"
                               }`}
                             />
-                            {s.status === "active" ? "Ativa" : "Bloqueada"}
+                            {s.status === "active"
+                              ? "Ativa"
+                              : s.financial_blocked
+                              ? "Bloqueada • Cobrança Pendente"
+                              : "Bloqueada"}
                           </span>
                         </div>
 
@@ -3651,6 +3729,97 @@ export default function SuperAdminPage() {
             >
               Concluir e Voltar
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: DESBLOQUEAR LOJA COM COBRANÇA PENDENTE */}
+      {unblockChoiceModal && (
+        <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xs flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-3xl p-6 sm:p-7 max-w-md w-full border border-slate-100 shadow-2xl space-y-5 animate-in fade-in zoom-in-95">
+            <div className="flex items-start justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <div className="w-11 h-11 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+                  <AlertCircle className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-base font-black text-slate-900">
+                    Desbloquear Loja com Pendência
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    {unblockChoiceModal.storeName}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setUnblockChoiceModal(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 flex items-center justify-center text-slate-500"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-xs text-amber-900 leading-relaxed">
+              Esta loja possui{" "}
+              <strong>
+                {unblockChoiceModal.pendingCount}{" "}
+                {unblockChoiceModal.pendingCount === 1
+                  ? "cobrança pendente"
+                  : "cobranças pendentes"}
+              </strong>{" "}
+              no total de{" "}
+              <strong>
+                {(unblockChoiceModal.pendingTotalCents / 100).toLocaleString("pt-BR", {
+                  style: "currency",
+                  currency: "BRL",
+                })}
+              </strong>
+              . Como deseja proceder ao liberar o acesso?
+            </div>
+
+            <div className="space-y-2.5">
+              <button
+                type="button"
+                disabled={unblockingMode !== null}
+                onClick={() => handleConfirmUnblockChoice("keep_charges")}
+                className="w-full p-3.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white text-left transition active:scale-[0.98] disabled:opacity-60"
+              >
+                <strong className="block text-xs font-black">
+                  {unblockingMode === "keep_charges"
+                    ? "Liberando..."
+                    : "Liberar Acesso e Manter Cobrança Pendente"}
+                </strong>
+                <span className="block text-[11px] text-emerald-100 mt-0.5">
+                  O lojista volta a operar agora, mas a cobrança continua em aberto para pagamento na InfinitePay.
+                </span>
+              </button>
+
+              <button
+                type="button"
+                disabled={unblockingMode !== null}
+                onClick={() => handleConfirmUnblockChoice("cancel_charges")}
+                className="w-full p-3.5 rounded-2xl bg-purple-50 hover:bg-purple-100 border border-purple-200 text-purple-950 text-left transition active:scale-[0.98] disabled:opacity-60"
+              >
+                <strong className="block text-xs font-black">
+                  {unblockingMode === "cancel_charges"
+                    ? "Cancelando e Liberando..."
+                    : "Cancelar Cobrança(s) Pendente(s) e Liberar"}
+                </strong>
+                <span className="block text-[11px] text-purple-700 mt-0.5">
+                  Ideal para testes ou acordos quitados fora do sistema: cancela a pendência internamente e libera a loja.
+                </span>
+              </button>
+
+              <button
+                type="button"
+                disabled={unblockingMode !== null}
+                onClick={() => setUnblockChoiceModal(null)}
+                className="w-full py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs"
+              >
+                Manter Bloqueada
+              </button>
+            </div>
           </div>
         </div>
       )}
