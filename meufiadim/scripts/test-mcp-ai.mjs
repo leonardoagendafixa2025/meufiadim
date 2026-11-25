@@ -133,6 +133,29 @@ const adminPage = fs.readFileSync(path.join(root, "src/app/admin/page.tsx"), "ut
 const slugPage = fs.readFileSync(path.join(root, "src/app/[slug]/page.tsx"), "utf8");
 assert.ok(adminPage.includes("AdminCopilotWidget"), "AdminCopilotWidget não montado em /admin");
 assert.ok(slugPage.includes("StoreSellerChatWidget"), "StoreSellerChatWidget não montado em /[slug]");
-console.log("✅ 6. Widgets Copiloto IA (/admin) e Vendedor IA (/[slug]) devidamente integrados.\n");
+assert.ok(adminPage.includes("StoreAiSkillsCard"), "StoreAiSkillsCard não montado em /admin");
+console.log("✅ 6. Widgets Copiloto IA (/admin), Vendedor IA (/[slug]) e Skills IA integrados.");
+
+// 7. Validar Skills do workspace (Part A) e Skills do Vendedor IA (Part B)
+for (const skillFile of [
+  ".agents/skills/meufiadim-regras-negocio/SKILL.md",
+  ".agents/skills/meufiadim-criativos-marketing/SKILL.md",
+]) {
+  assert.ok(
+    fs.existsSync(path.join(repoRoot, skillFile)),
+    `Skill de workspace ausente: ${skillFile}`
+  );
+}
+for (const appSkillFile of [
+  "src/lib/ai-skills.ts",
+  "src/app/api/store/ai-skills/route.ts",
+  "src/components/admin/StoreAiSkillsCard.tsx",
+]) {
+  assert.ok(
+    fs.existsSync(path.join(root, appSkillFile)),
+    `Arquivo de Skill da IA ausente: ${appSkillFile}`
+  );
+}
+console.log("✅ 7. Skills do projeto (.agents/skills) e Skills por segmento do Vendedor IA validadas.\n");
 
 console.log("🎉 TODOS OS TESTES DO MCP E AGENTES IA PASSARAM!");

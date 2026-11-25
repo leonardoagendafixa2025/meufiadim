@@ -48,7 +48,17 @@ export async function POST(req: Request) {
     const merchantStore = (stores || []).find((s) => matchPhone(s.whatsapp, fromPhone));
 
     if (merchantStore) {
-      // Lojista falando no WhatsApp com o Copiloto IA da própria loja
+      let skillId: string | null = null;
+      let customInstructions: string | null = null;
+      if (merchantStore.owner_id) {
+        try {
+          const { data: ownerData } = await supabase.auth.admin.getUserById(merchantStore.owner_id);
+          skillId = ownerData?.user?.user_metadata?.ai_skill_id || null;
+          customInstructions = ownerData?.user?.user_metadata?.ai_custom_instructions || null;
+        } catch {}
+      }
+
+      // Lojista falando no WhatsApp com o Assistente IA da própria loja
       const result = await runAiAgent({
         message: cleanText,
         history: [],
@@ -58,6 +68,8 @@ export async function POST(req: Request) {
           userId: merchantStore.owner_id,
         },
         storeName: merchantStore.name,
+        skillId,
+        customInstructions,
       });
 
       return NextResponse.json({
@@ -132,6 +144,16 @@ export async function POST(req: Request) {
     }
 
     // 3. Cliente identificado em uma loja -> Vendedor IA responde com catálogo/frete/pedidos reais!
+    let targetSkillId: string | null = null;
+    let targetCustomInstructions: string | null = null;
+    if (targetStore.owner_id) {
+      try {
+        const { data: ownerData } = await supabase.auth.admin.getUserById(targetStore.owner_id);
+        targetSkillId = ownerData?.user?.user_metadata?.ai_skill_id || null;
+        targetCustomInstructions = ownerData?.user?.user_metadata?.ai_custom_instructions || null;
+      } catch {}
+    }
+
     const cleanQuestion = cleanText.replace(/#[a-z0-9-]+/gi, "").trim() || "olá";
     const result = await runAiAgent({
       message: cleanQuestion,
@@ -142,6 +164,8 @@ export async function POST(req: Request) {
         customerId,
       },
       storeName: targetStore.name,
+      skillId: targetSkillId,
+      customInstructions: targetCustomInstructions,
     });
 
     return NextResponse.json({

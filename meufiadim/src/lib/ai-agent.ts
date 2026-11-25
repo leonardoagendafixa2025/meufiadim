@@ -3,6 +3,11 @@ import {
   getToolsForRole,
   type MCPToolContext,
 } from "@/lib/mcp-tools";
+import {
+  resolveStoreAiSkill,
+  sanitizeCustomInstructions,
+  type StoreAiSkillId,
+} from "@/lib/ai-skills";
 import { formatBRL } from "@/lib/whatsapp";
 
 export interface ChatTurn {
@@ -27,36 +32,51 @@ export interface AgentRunResult {
   aiDiagnosticDetail?: string;
 }
 
-function buildSystemPrompt(ctx: MCPToolContext, storeName?: string): string {
+function buildSystemPrompt(
+  ctx: MCPToolContext,
+  storeName?: string,
+  skillId?: StoreAiSkillId | string | null,
+  customInstructions?: string | null
+): string {
   const today = new Date().toLocaleDateString("pt-BR", {
     timeZone: "America/Sao_Paulo",
   });
+  const skill = resolveStoreAiSkill(skillId);
+  const cleanCustom = sanitizeCustomInstructions(customInstructions);
 
   if (ctx.role === "merchant") {
     return [
       `Você é o Assistente oficial da loja "${storeName || "MEU FIADIM"}" no MEU FIADIM.`,
       `Data de hoje em Brasília: ${today}.`,
       `Você conversa com o LOJISTA dono do negócio em português do Brasil claro, direto, amigável e prático.`,
+      skill.merchantPromptRules,
+      cleanCustom ? `PREFERÊNCIAS EXTRA DO LOJISTA: ${cleanCustom}` : "",
       `Você pode consultar resumo financeiro, listar devedores, ver estoque baixo, acompanhar/atualizar pedidos (EM_PREPARO, SAIU_ENTREGA, ENTREGUE), lançar vendas no fiado (create_fiado_sale), dar baixa de pagamentos (record_fiado_payment), cadastrar encomendas e enviar cobranças no WhatsApp.`,
       `Use SEMPRE suas ferramentas para consultar números, clientes, saldos, encomendas e cardápio — nunca invente valores ou clientes.`,
       `REGRA DE SEGURANÇA PARA AÇÕES SENSÍVEIS:`,
       `- Para ações de escrita ou envio (create_fiado_sale, record_fiado_payment, create_encomenda, send_whatsapp_charge, update_order_status), se o lojista informou cliente e valor/status claramente, execute; se faltar dado obrigatório ou houver ambiguidade, peça confirmação antes.`,
       `- Nunca altere comissões da plataforma nem prometa recursos inexistentes.`,
       `Formate valores monetários em Real (R$) e use listas curtas e legíveis.`,
-    ].join("\n");
+    ]
+      .filter(Boolean)
+      .join("\n");
   }
 
   return [
     `Você é o Vendedor e Atendente Virtual IA oficial da loja "${storeName || "MEU FIADIM"}".`,
     `Data de hoje em Brasília: ${today}.`,
     `Você conversa com o CLIENTE final da loja em português do Brasil simpático, rápido e vendedor (ajuda o cliente a escolher produtos, tirar dúvidas de entrega/frete e fechar a compra).`,
+    skill.customerPromptRules,
+    cleanCustom ? `REGRAS ESPECÍFICAS DESTA LOJA: ${cleanCustom}` : "",
     `REGRAS IMPORTANTES:`,
     `1. Use SEMPRE as ferramentas MCP reais (search_catalog, get_store_delivery_info, calculate_freight_by_cep, get_my_customer_orders, add_to_cart_suggestion) antes de responder sobre preços, produtos, frete ou pedidos.`,
     `2. NUNCA invente produtos, preços ou taxas de entrega que não vieram das ferramentas.`,
     `3. Se o cliente pedir para adicionar um item na sacola/carrinho, use add_to_cart_suggestion com o productId exato obtido de search_catalog.`,
     `4. Se o cliente perguntar sobre pedidos anteriores ou saldo dele sem estar logado, oriente-o a fazer login com celular e senha no topo da loja.`,
     `5. Lembre de informar que para finalizar o pedido na vitrine é necessário estar conectado com celular e senha.`,
-  ].join("\n");
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 /**
@@ -100,6 +120,8 @@ async function runWithGemini(params: {
   history: ChatTurn[];
   ctx: MCPToolContext;
   storeName?: string;
+  skillId?: StoreAiSkillId | string | null;
+  customInstructions?: string | null;
 }): Promise<AgentRunResult> {
   const {
     apiKey,
@@ -109,6 +131,8 @@ async function runWithGemini(params: {
     history,
     ctx,
     storeName,
+    skillId,
+    customInstructions,
   } = params;
   const tools = getToolsForRole(ctx.role);
   const toolsUsed: string[] = [];
@@ -135,7 +159,9 @@ async function runWithGemini(params: {
       },
       body: JSON.stringify({
         systemInstruction: {
-          parts: [{ text: buildSystemPrompt(ctx, storeName) }],
+          parts: [
+            { text: buildSystemPrompt(ctx, storeName, skillId, customInstructions) },
+          ],
         },
         contents,
         tools: [{ functionDeclarations: toGeminiDeclarations(tools) }],
@@ -157,7 +183,9 @@ async function runWithGemini(params: {
         },
         body: JSON.stringify({
           systemInstruction: {
-            parts: [{ text: buildSystemPrompt(ctx, storeName) }],
+            parts: [
+              { text: buildSystemPrompt(ctx, storeName, skillId, customInstructions) },
+            ],
           },
           contents,
           tools: [{ functionDeclarations: toGeminiDeclarations(tools) }],
@@ -234,8 +262,10 @@ async function runWithOpenAI(params: {
   history: ChatTurn[];
   ctx: MCPToolContext;
   storeName?: string;
+  skillId?: StoreAiSkillId | string | null;
+  customInstructions?: string | null;
 }): Promise<AgentRunResult> {
-  const { apiKey, message, history, ctx, storeName } = params;
+  const { apiKey, message, history, ctx, storeName, skillId, customInstructions } = params;
   const tools = getToolsForRole(ctx.role);
   const toolsUsed: string[] = [];
   const cartActions: CartAction[] = [];
@@ -250,7 +280,10 @@ async function runWithOpenAI(params: {
   }));
 
   const messages: any[] = [
-    { role: "system", content: buildSystemPrompt(ctx, storeName) },
+    {
+      role: "system",
+      content: buildSystemPrompt(ctx, storeName, skillId, customInstructions),
+    },
     ...history.slice(-8).map((h) => ({ role: h.role, content: h.content })),
     { role: "user", content: message },
   ];
@@ -332,8 +365,10 @@ async function runLocalMcpFallback(params: {
   message: string;
   ctx: MCPToolContext;
   storeName?: string;
+  skillId?: StoreAiSkillId | string | null;
 }): Promise<AgentRunResult> {
-  const { message, ctx, storeName } = params;
+  const { message, ctx, storeName, skillId } = params;
+  const skill = resolveStoreAiSkill(skillId);
   const q = message.toLowerCase().trim();
   const toolsUsed: string[] = [];
   const cartActions: CartAction[] = [];
@@ -579,7 +614,7 @@ async function runLocalMcpFallback(params: {
 
   return {
     reply: lines.length
-      ? `Olá! 😊 Veja os produtos disponíveis na *${storeName || "loja"}*:\n\n${lines.join("\n")}\n\nPosso verificar o frete pelo seu *CEP* ou responder sobre entrega e horários!`
+      ? `Olá! 😊 Veja os produtos disponíveis na *${storeName || "loja"}*:\n\n${lines.join("\n")}\n\n${skill.localSellerTip}`
       : `Olá! Como posso ajudar você hoje na *${storeName || "loja"}*?`,
     toolsUsed,
     cartActions,
@@ -592,8 +627,17 @@ export async function runAiAgent(params: {
   history?: ChatTurn[];
   ctx: MCPToolContext;
   storeName?: string;
+  skillId?: StoreAiSkillId | string | null;
+  customInstructions?: string | null;
 }): Promise<AgentRunResult> {
-  const { message, history = [], ctx, storeName } = params;
+  const {
+    message,
+    history = [],
+    ctx,
+    storeName,
+    skillId,
+    customInstructions,
+  } = params;
   const geminiKey = (process.env.GEMINI_API_KEY || "").trim();
   const openAiKey = (process.env.OPENAI_API_KEY || "").trim();
 
@@ -629,6 +673,8 @@ export async function runAiAgent(params: {
           history,
           ctx,
           storeName,
+          skillId,
+          customInstructions,
         });
         return { ...res, aiDiagnostic: "active" };
       } catch (err) {
@@ -684,6 +730,8 @@ export async function runAiAgent(params: {
               history,
               ctx,
               storeName,
+              skillId,
+              customInstructions,
             });
             return { ...res, aiDiagnostic: "active" };
           } catch (mErr) {
@@ -708,6 +756,8 @@ export async function runAiAgent(params: {
         history,
         ctx,
         storeName,
+        skillId,
+        customInstructions,
       });
       return { ...res, aiDiagnostic: "active" };
     } catch (err) {
@@ -718,7 +768,12 @@ export async function runAiAgent(params: {
     }
   }
 
-  const fallback = await runLocalMcpFallback({ message, ctx, storeName });
+  const fallback = await runLocalMcpFallback({
+    message,
+    ctx,
+    storeName,
+    skillId,
+  });
   const combinedErrors = attemptErrors.join(" | ").slice(0, 900);
   return {
     ...fallback,

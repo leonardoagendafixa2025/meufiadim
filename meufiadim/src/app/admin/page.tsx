@@ -71,6 +71,7 @@ import {
 import { FiadoBillingCard } from "@/components/admin/FiadoBillingCard";
 import { PromotionsTab } from "@/components/admin/PromotionsTab";
 import { ReportsTab } from "@/components/admin/ReportsTab";
+import { StoreAiSkillsCard } from "@/components/admin/StoreAiSkillsCard";
 
 interface Store {
   id: string;
@@ -1806,6 +1807,7 @@ export default function AdminDashboardPage() {
 
         {tab === "whatsapp" && (
           <div className="space-y-4">
+            <StoreAiSkillsCard />
             {/* Visão do Lojista: Explicação amigável, sem QR Code */}
             <div className="bg-white rounded-[32px] p-6 sm:p-7 border border-slate-200/70 shadow-sm shadow-slate-200/50 space-y-6">
               <div className="flex items-start justify-between gap-4">

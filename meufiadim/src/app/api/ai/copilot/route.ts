@@ -53,6 +53,8 @@ export async function POST(req: Request) {
         userId: user.id,
       },
       storeName: store.name,
+      skillId: user.user_metadata?.ai_skill_id || null,
+      customInstructions: user.user_metadata?.ai_custom_instructions || null,
     });
 
     return NextResponse.json({
