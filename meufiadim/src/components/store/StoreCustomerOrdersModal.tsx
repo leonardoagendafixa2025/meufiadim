@@ -20,9 +20,16 @@ import {
   Bike,
   Award,
   Tag,
+  RotateCcw,
+  BellRing,
 } from "lucide-react";
 import { formatBRL } from "@/lib/whatsapp";
 import { formatPhoneBR } from "@/lib/customer-auth";
+import {
+  getBrowserNotificationPermission,
+  isBrowserPushSupported,
+  subscribeBrowserPush,
+} from "@/lib/push-client";
 import {
   ORDER_STATUS_META,
   normalizeOrderStatus,
@@ -66,6 +73,7 @@ interface StoreCustomerOrdersModalProps {
   brandColor?: string;
   onLogout: () => void;
   onNewOrderClick: () => void;
+  onRepeatOrder?: (items: Array<{ id?: string; name?: string; qty?: number; price?: number }>) => void;
 }
 
 export function StoreCustomerOrdersModal({
@@ -77,6 +85,7 @@ export function StoreCustomerOrdersModal({
   brandColor = "#059669",
   onLogout,
   onNewOrderClick,
+  onRepeatOrder,
 }: StoreCustomerOrdersModalProps) {
   const [sales, setSales] = useState<Sale[]>([]);
   const [encomendas, setEncomendas] = useState<Encomenda[]>([]);
@@ -85,6 +94,10 @@ export function StoreCustomerOrdersModal({
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"compras" | "encomendas">("compras");
   const [error, setError] = useState<string | null>(null);
+  const [pushSupported, setPushSupported] = useState(false);
+  const [pushActive, setPushActive] = useState(false);
+  const [enablingPush, setEnablingPush] = useState(false);
+  const [pushFeedback, setPushFeedback] = useState<string | null>(null);
 
   const fetchOrders = async (silent = false) => {
     if (!customer?.id || !storeId) return;
@@ -121,6 +134,16 @@ export function StoreCustomerOrdersModal({
   };
 
   useEffect(() => {
+    const supported = isBrowserPushSupported();
+    setPushSupported(supported);
+    if (supported && getBrowserNotificationPermission() === "granted" && storeId) {
+      try {
+        if (localStorage.getItem(`meufiadim_cust_push_${storeId}_${customer?.id}`) === "1") {
+          setPushActive(true);
+        }
+      } catch {}
+    }
+
     if (!isOpen) return;
     fetchOrders(false);
 
@@ -131,6 +154,30 @@ export function StoreCustomerOrdersModal({
 
     return () => clearInterval(timer);
   }, [isOpen, customer?.id, storeId]);
+
+  async function handleEnableCustomerPush() {
+    if (!storeId || !customer?.id || enablingPush) return;
+    setEnablingPush(true);
+    setPushFeedback(null);
+    try {
+      const res = await subscribeBrowserPush({
+        storeId,
+        role: "customer",
+        customerId: customer.id,
+      });
+      if (res.ok) {
+        setPushActive(true);
+        try {
+          localStorage.setItem(`meufiadim_cust_push_${storeId}_${customer.id}`, "1");
+        } catch {}
+        setPushFeedback("Avisos ativados! Você receberá alertas quando seu pedido avançar.");
+      } else {
+        setPushFeedback(res.reason || "Não foi possível ativar notificações neste navegador.");
+      }
+    } finally {
+      setEnablingPush(false);
+    }
+  }
 
   if (!isOpen) return null;
 
@@ -349,39 +396,70 @@ export function StoreCustomerOrdersModal({
           )}
         </div>
 
-        {/* SELETOR DE ABAS */}
-        <div className="px-5 sm:px-6 pt-3 pb-2 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
-          <div className="flex gap-2">
+        {/* SELETOR DE ABAS + AVISOS PUSH */}
+        <div className="px-5 sm:px-6 pt-3 pb-2 border-b border-slate-100 dark:border-slate-800 space-y-2.5">
+          <div className="flex items-center justify-between">
+            <div className="flex gap-2">
+              <button
+                onClick={() => setActiveTab("compras")}
+                className={`px-3 py-1.5 text-xs font-black rounded-xl transition-all ${
+                  activeTab === "compras"
+                    ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs"
+                    : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
+                }`}
+              >
+                Pedidos ao Vivo ({sales.length})
+              </button>
+              <button
+                onClick={() => setActiveTab("encomendas")}
+                className={`px-3 py-1.5 text-xs font-black rounded-xl transition-all ${
+                  activeTab === "encomendas"
+                    ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs"
+                    : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
+                }`}
+              >
+                Encomendas ({encomendas.length})
+              </button>
+            </div>
+
             <button
-              onClick={() => setActiveTab("compras")}
-              className={`px-3 py-1.5 text-xs font-black rounded-xl transition-all ${
-                activeTab === "compras"
-                  ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs"
-                  : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
-              }`}
+              onClick={() => fetchOrders(false)}
+              disabled={loading}
+              title="Atualizar histórico"
+              className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition rounded-lg"
             >
-              Pedidos ao Vivo ({sales.length})
-            </button>
-            <button
-              onClick={() => setActiveTab("encomendas")}
-              className={`px-3 py-1.5 text-xs font-black rounded-xl transition-all ${
-                activeTab === "encomendas"
-                  ? "bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs"
-                  : "text-slate-500 hover:text-slate-800 dark:hover:text-slate-300"
-              }`}
-            >
-              Encomendas ({encomendas.length})
+              <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
             </button>
           </div>
 
-          <button
-            onClick={() => fetchOrders(false)}
-            disabled={loading}
-            title="Atualizar histórico"
-            className="p-1.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition rounded-lg"
-          >
-            <RefreshCw className={`w-3.5 h-3.5 ${loading ? "animate-spin" : ""}`} />
-          </button>
+          {pushSupported && (
+            <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-2xl bg-slate-50 dark:bg-slate-800/70 border border-slate-200/70 dark:border-slate-700/70 text-[11px]">
+              <span className="font-semibold text-slate-600 dark:text-slate-300 flex items-center gap-1.5">
+                <BellRing className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                {pushActive
+                  ? "Avisos em tempo real ativos neste aparelho"
+                  : "Receba push na tela quando seu pedido sair"}
+              </span>
+              <button
+                type="button"
+                disabled={enablingPush || pushActive}
+                onClick={handleEnableCustomerPush}
+                className={`px-2.5 py-1 rounded-xl font-extrabold text-[11px] transition active:scale-95 ${
+                  pushActive
+                    ? "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300"
+                    : "bg-slate-900 text-white hover:bg-slate-800 dark:bg-emerald-600"
+                }`}
+              >
+                {enablingPush ? "Ativando..." : pushActive ? "Ativado ✓" : "Ativar Avisos"}
+              </button>
+            </div>
+          )}
+
+          {pushFeedback && (
+            <p className="text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">
+              {pushFeedback}
+            </p>
+          )}
         </div>
 
         {/* LISTAGEM DE ITENS */}
@@ -509,6 +587,25 @@ export function StoreCustomerOrdersModal({
                     </div>
 
                     {renderOrderTimeline(sale)}
+
+                    {Array.isArray(sale.items) &&
+                      sale.items.length > 0 &&
+                      onRepeatOrder && (
+                        <div className="mt-3 pt-2.5 border-t border-slate-100 dark:border-slate-800 flex justify-end">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              onRepeatOrder(sale.items);
+                              onClose();
+                            }}
+                            style={{ borderColor: `${brandColor}40`, color: brandColor }}
+                            className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl border bg-white dark:bg-slate-900 hover:bg-slate-50 dark:hover:bg-slate-800 font-extrabold text-xs shadow-xs active:scale-95 transition"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" />
+                            <span>Pedir de Novo</span>
+                          </button>
+                        </div>
+                      )}
                   </div>
                 );
               })

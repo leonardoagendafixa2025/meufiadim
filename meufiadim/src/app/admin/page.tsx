@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import {
@@ -42,6 +42,7 @@ import {
   ShoppingBag,
   BarChart3,
   AlertTriangle,
+  BellRing,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { formatBRL } from "@/lib/whatsapp";
@@ -72,6 +73,8 @@ import { FiadoBillingCard } from "@/components/admin/FiadoBillingCard";
 import { PromotionsTab } from "@/components/admin/PromotionsTab";
 import { ReportsTab } from "@/components/admin/ReportsTab";
 import { StoreAiSkillsCard } from "@/components/admin/StoreAiSkillsCard";
+import { DormantCustomersCard } from "@/components/admin/DormantCustomersCard";
+import { playOrderBellChime } from "@/lib/push-client";
 
 interface Store {
   id: string;
@@ -277,9 +280,47 @@ export default function AdminDashboardPage() {
   } | null>(null);
   const [loadingMp, setLoadingMp] = useState(false);
 
+  // Alertas de Novo Pedido (Campainha + Banner + Push)
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [newOrderAlert, setNewOrderAlert] = useState<{
+    orderId: string;
+    customerName: string;
+    totalAmount: number;
+  } | null>(null);
+  const knownOrderIdsRef = useRef<Set<string> | null>(null);
+
   useEffect(() => {
+    try {
+      const savedSound = localStorage.getItem("meufiadim_order_bell_enabled");
+      if (savedSound === "0") setSoundEnabled(false);
+
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlTab = urlParams.get("tab");
+      if (urlTab === "pedidos") {
+        setTab("pedidos");
+      }
+    } catch {}
     loadDashboard();
   }, []);
+
+  useEffect(() => {
+    if (!store?.id) return;
+    const timer = setInterval(() => {
+      loadAdminOrders(true);
+    }, 15000);
+    return () => clearInterval(timer);
+  }, [store?.id, soundEnabled]);
+
+  function handleToggleOrderSound() {
+    setSoundEnabled((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem("meufiadim_order_bell_enabled", next ? "1" : "0");
+      } catch {}
+      if (next) playOrderBellChime();
+      return next;
+    });
+  }
 
   async function loadDashboard() {
     const {
@@ -364,9 +405,9 @@ export default function AdminDashboardPage() {
     loadMerchantCharges();
   }
 
-  const loadAdminOrders = async () => {
+  const loadAdminOrders = async (silent = false) => {
     try {
-      setAdminOrdersLoading(true);
+      if (!silent) setAdminOrdersLoading(true);
       const {
         data: { session },
       } = await supabase.auth.getSession();
@@ -377,12 +418,31 @@ export default function AdminDashboardPage() {
       });
       const data = await res.json();
       if (res.ok && data.ok) {
-        setAdminOrders(data.orders || []);
+        const nextOrders: AdminOrderItem[] = data.orders || [];
+        const incomingIds = new Set(nextOrders.map((o) => o.id));
+
+        if (knownOrderIdsRef.current !== null) {
+          const brandNew = nextOrders.find(
+            (o) =>
+              !knownOrderIdsRef.current!.has(o.id) &&
+              String(o.order_status || "RECEBIDO").toUpperCase() === "RECEBIDO"
+          );
+          if (brandNew) {
+            if (soundEnabled) playOrderBellChime();
+            setNewOrderAlert({
+              orderId: brandNew.id,
+              customerName: brandNew.customer?.name || "Novo cliente",
+              totalAmount: Number(brandNew.total_amount || 0),
+            });
+          }
+        }
+        knownOrderIdsRef.current = incomingIds;
+        setAdminOrders(nextOrders);
       }
     } catch (e) {
       console.warn("Erro ao carregar pedidos ao vivo:", e);
     } finally {
-      setAdminOrdersLoading(false);
+      if (!silent) setAdminOrdersLoading(false);
     }
   };
 
@@ -1397,6 +1457,44 @@ export default function AdminDashboardPage() {
               />
             )}
 
+            {newOrderAlert && (
+              <div className="p-4 rounded-3xl bg-emerald-600 text-white shadow-lg shadow-emerald-600/25 flex flex-wrap items-center justify-between gap-3 animate-in fade-in slide-in-from-top-3 duration-200">
+                <div className="flex items-center gap-3 min-w-0">
+                  <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center shrink-0">
+                    <BellRing className="w-5 h-5 animate-bounce" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-extrabold uppercase tracking-wider text-emerald-100">
+                      Novo Pedido Recebido!
+                    </p>
+                    <p className="text-sm font-black truncate">
+                      {newOrderAlert.customerName} • {formatBRL(newOrderAlert.totalAmount)}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTab("pedidos");
+                      setNewOrderAlert(null);
+                    }}
+                    className="px-4 py-2 rounded-xl bg-white text-emerald-800 font-extrabold text-xs shadow-sm hover:bg-emerald-50 active:scale-95 transition"
+                  >
+                    Ver Pedido Agora
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setNewOrderAlert(null)}
+                    aria-label="Fechar alerta"
+                    className="p-2 rounded-xl hover:bg-white/15 text-white/80 transition"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+
             {(openOrdersCount > 0 || lowStockCount > 0) && (
               <div className="flex flex-wrap items-center gap-2">
                 {openOrdersCount > 0 && (
@@ -1428,6 +1526,9 @@ export default function AdminDashboardPage() {
 
             {tab === "pedidos" && (
               <MerchantOrdersTab
+                storeId={store.id}
+                soundEnabled={soundEnabled}
+                onToggleSound={handleToggleOrderSound}
                 orders={adminOrders}
                 loading={adminOrdersLoading}
                 onRefresh={async () => {
@@ -1438,15 +1539,18 @@ export default function AdminDashboardPage() {
             )}
 
             {tab === "relatorios" && (
-              <ReportsTab
-                storeName={store.name}
-                products={products}
-                customers={customers}
-                sales={sales}
-                lowStockThreshold={lowStockThreshold}
-                onThresholdSaved={setLowStockThreshold}
-                onStockUpdated={loadDashboard}
-              />
+              <div className="space-y-5">
+                <DormantCustomersCard />
+                <ReportsTab
+                  storeName={store.name}
+                  products={products}
+                  customers={customers}
+                  sales={sales}
+                  lowStockThreshold={lowStockThreshold}
+                  onThresholdSaved={setLowStockThreshold}
+                  onStockUpdated={loadDashboard}
+                />
+              </div>
             )}
 
             {tab === "promocoes" && <PromotionsTab />}

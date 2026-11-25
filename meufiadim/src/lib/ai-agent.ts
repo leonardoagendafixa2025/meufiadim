@@ -23,13 +23,41 @@ export interface CartAction {
   qty: number;
 }
 
+export interface PixAction {
+  type: "pix_code";
+  code: string;
+  amount: number;
+  storeName: string;
+  orderId?: string;
+}
+
 export interface AgentRunResult {
   reply: string;
   toolsUsed: string[];
   cartActions: CartAction[];
+  pixActions?: PixAction[];
   provider: "gemini" | "openai" | "local-mcp";
   aiDiagnostic?: "active" | "missing_key" | "api_error";
   aiDiagnosticDetail?: string;
+}
+
+function collectToolActions(
+  output: any,
+  cartActions: CartAction[],
+  pixActions: PixAction[]
+) {
+  if (!output) return;
+  if (output.cartAction?.type === "add_to_cart") {
+    cartActions.push(output.cartAction);
+  }
+  if (Array.isArray(output.cartActions)) {
+    for (const act of output.cartActions) {
+      if (act?.type === "add_to_cart") cartActions.push(act);
+    }
+  }
+  if (output.pixAction?.type === "pix_code" && output.pixAction.code) {
+    pixActions.push(output.pixAction);
+  }
 }
 
 function buildSystemPrompt(
@@ -51,10 +79,10 @@ function buildSystemPrompt(
       `Você conversa com o LOJISTA dono do negócio em português do Brasil claro, direto, amigável e prático.`,
       skill.merchantPromptRules,
       cleanCustom ? `PREFERÊNCIAS EXTRA DO LOJISTA: ${cleanCustom}` : "",
-      `Você pode consultar resumo financeiro, listar devedores, ver estoque baixo, acompanhar/atualizar pedidos (EM_PREPARO, SAIU_ENTREGA, ENTREGUE), lançar vendas no fiado (create_fiado_sale), dar baixa de pagamentos (record_fiado_payment), cadastrar encomendas e enviar cobranças no WhatsApp.`,
+      `Você pode consultar resumo financeiro, listar devedores, ver clientes sumidos (list_dormant_customers) e reativá-los (send_reactivation_whatsapp), ver estoque baixo, acompanhar/atualizar pedidos (EM_PREPARO, SAIU_ENTREGA, ENTREGUE), lançar vendas no fiado (create_fiado_sale), dar baixa de pagamentos (record_fiado_payment), cadastrar encomendas e enviar cobranças no WhatsApp.`,
       `Use SEMPRE suas ferramentas para consultar números, clientes, saldos, encomendas e cardápio — nunca invente valores ou clientes.`,
       `REGRA DE SEGURANÇA PARA AÇÕES SENSÍVEIS:`,
-      `- Para ações de escrita ou envio (create_fiado_sale, record_fiado_payment, create_encomenda, send_whatsapp_charge, update_order_status), se o lojista informou cliente e valor/status claramente, execute; se faltar dado obrigatório ou houver ambiguidade, peça confirmação antes.`,
+      `- Para ações de escrita ou envio (create_fiado_sale, record_fiado_payment, create_encomenda, send_whatsapp_charge, send_reactivation_whatsapp, update_order_status), se o lojista informou cliente e valor/status/ação claramente, execute; se faltar dado obrigatório ou houver ambiguidade, peça confirmação antes.`,
       `- Nunca altere comissões da plataforma nem prometa recursos inexistentes.`,
       `Formate valores monetários em Real (R$) e use listas curtas e legíveis.`,
     ]
@@ -65,18 +93,35 @@ function buildSystemPrompt(
   return [
     `Você é o Vendedor e Atendente Virtual IA oficial da loja "${storeName || "MEU FIADIM"}".`,
     `Data de hoje em Brasília: ${today}.`,
-    `Você conversa com o CLIENTE final da loja em português do Brasil simpático, rápido e vendedor (ajuda o cliente a escolher produtos, tirar dúvidas de entrega/frete e fechar a compra).`,
+    `Você conversa com o CLIENTE final da loja em português do Brasil simpático, rápido e vendedor (ajuda o cliente a escolher produtos, tirar dúvidas de entrega/frete, repetir o último pedido e fechar a compra com Pix).`,
     skill.customerPromptRules,
     cleanCustom ? `REGRAS ESPECÍFICAS DESTA LOJA: ${cleanCustom}` : "",
     `REGRAS IMPORTANTES:`,
-    `1. Use SEMPRE as ferramentas MCP reais (search_catalog, get_store_delivery_info, calculate_freight_by_cep, get_my_customer_orders, add_to_cart_suggestion) antes de responder sobre preços, produtos, frete ou pedidos.`,
-    `2. NUNCA invente produtos, preços ou taxas de entrega que não vieram das ferramentas.`,
-    `3. Se o cliente pedir para adicionar um item na sacola/carrinho, use add_to_cart_suggestion com o productId exato obtido de search_catalog.`,
-    `4. Se o cliente perguntar sobre pedidos anteriores ou saldo dele sem estar logado, oriente-o a fazer login com celular e senha no topo da loja.`,
-    `5. Lembre de informar que para finalizar o pedido na vitrine é necessário estar conectado com celular e senha.`,
+    `1. Use SEMPRE as ferramentas MCP reais (search_catalog, get_store_delivery_info, calculate_freight_by_cep, get_my_customer_orders, add_to_cart_suggestion, build_magic_cart_link, repeat_last_customer_order, create_conversational_order_pix) antes de responder sobre preços, produtos, frete ou pedidos.`,
+    `2. NUNCA invente produtos, preços, códigos Pix ou taxas de entrega que não vieram das ferramentas.`,
+    `3. Se o cliente pedir para adicionar itens na sacola, use add_to_cart_suggestion (1 item) ou build_magic_cart_link (vários itens ou link pronto).`,
+    `4. Se o cliente pedir para repetir o último pedido ("pedir de novo"), use repeat_last_customer_order.`,
+    `5. Se o cliente confirmar que quer FECHAR o pedido no chat informando itens, modalidade (entrega/retirada) e pagamento (ex: Pix), use create_conversational_order_pix (quando autenticado) e exiba o Pix Copia e Cola retornado. Caso não esteja logado, monte o Link Mágico com build_magic_cart_link!`,
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+function toGeminiSchemaNode(node: any): any {
+  const upperType = String(node?.type || "string").toUpperCase();
+  const base: Record<string, any> = {
+    type: upperType,
+    description: node?.description || "",
+  };
+  if (upperType === "ARRAY" && node?.items) {
+    base.items = toGeminiSchemaNode(node.items);
+  }
+  if (upperType === "OBJECT" && node?.properties) {
+    base.properties = Object.fromEntries(
+      Object.entries(node.properties).map(([k, v]) => [k, toGeminiSchemaNode(v)])
+    );
+  }
+  return base;
 }
 
 /**
@@ -98,13 +143,7 @@ export function toGeminiDeclarations(tools: ReturnType<typeof getToolsForRole>) 
       parameters: {
         type: "OBJECT",
         properties: Object.fromEntries(
-          entries.map(([k, v]: [string, any]) => [
-            k,
-            {
-              type: String(v.type || "string").toUpperCase(),
-              description: v.description || "",
-            },
-          ])
+          entries.map(([k, v]: [string, any]) => [k, toGeminiSchemaNode(v)])
         ),
         ...(t.inputSchema.required?.length ? { required: t.inputSchema.required } : {}),
       },
@@ -137,6 +176,7 @@ async function runWithGemini(params: {
   const tools = getToolsForRole(ctx.role);
   const toolsUsed: string[] = [];
   const cartActions: CartAction[] = [];
+  const pixActions: PixAction[] = [];
 
   const contents: any[] = history.slice(-8).map((h) => ({
     role: h.role === "assistant" ? "model" : "user",
@@ -217,6 +257,7 @@ async function runWithGemini(params: {
         reply: replyText || "Concluído! Como posso ajudar mais?",
         toolsUsed,
         cartActions,
+        pixActions,
         provider: "gemini",
       };
     }
@@ -230,9 +271,7 @@ async function runWithGemini(params: {
       let output: any;
       try {
         output = await executeMcpTool(name, args || {}, ctx);
-        if (output?.cartAction?.type === "add_to_cart") {
-          cartActions.push(output.cartAction);
-        }
+        collectToolActions(output, cartActions, pixActions);
       } catch (e: any) {
         output = { error: e?.message || "Erro ao executar ferramenta MCP." };
       }
@@ -252,6 +291,7 @@ async function runWithGemini(params: {
     reply: "Consultei seus dados! Se precisar de mais algum detalhe, é só perguntar.",
     toolsUsed,
     cartActions,
+    pixActions,
     provider: "gemini",
   };
 }
@@ -269,6 +309,7 @@ async function runWithOpenAI(params: {
   const tools = getToolsForRole(ctx.role);
   const toolsUsed: string[] = [];
   const cartActions: CartAction[] = [];
+  const pixActions: PixAction[] = [];
 
   const openAiTools = tools.map((t) => ({
     type: "function",
@@ -317,6 +358,7 @@ async function runWithOpenAI(params: {
         reply: (msg.content || "").trim() || "Pronto! Em que posso ajudar?",
         toolsUsed,
         cartActions,
+        pixActions,
         provider: "openai",
       };
     }
@@ -334,9 +376,7 @@ async function runWithOpenAI(params: {
       let output: any;
       try {
         output = await executeMcpTool(name, args, ctx);
-        if (output?.cartAction?.type === "add_to_cart") {
-          cartActions.push(output.cartAction);
-        }
+        collectToolActions(output, cartActions, pixActions);
       } catch (e: any) {
         output = { error: e?.message || "Erro ao executar tool." };
       }
@@ -353,6 +393,7 @@ async function runWithOpenAI(params: {
     reply: "Consulta concluída! Precisa de mais alguma coisa?",
     toolsUsed,
     cartActions,
+    pixActions,
     provider: "openai",
   };
 }
@@ -395,6 +436,36 @@ async function runLocalMcpFallback(params: {
           provider: "local-mcp",
         };
       }
+    }
+
+    if (
+      q.includes("sumid") ||
+      q.includes("inativ") ||
+      q.includes("reativa") ||
+      q.includes("sumiu")
+    ) {
+      toolsUsed.push("list_dormant_customers");
+      const res = await executeMcpTool("list_dormant_customers", {}, ctx);
+      if (!res.customers?.length) {
+        return {
+          reply: `✅ Nenhum cliente está sumido há mais de ${res.inactiveDays} dias!`,
+          toolsUsed,
+          cartActions,
+          provider: "local-mcp",
+        };
+      }
+      const lines = res.customers
+        .slice(0, 8)
+        .map(
+          (c: any, idx: number) =>
+            `${idx + 1}. *${c.name}* — ${c.daysSinceLastPurchase}d sem pedir (Total: ${c.totalSpentFormatted} • Último: ${c.lastOrderDescription})`
+        );
+      return {
+        reply: `🎯 *Clientes Sumidos (${res.count} há +${res.inactiveDays} dias):*\n\n${lines.join("\n")}\n\n_Dica: abra a aba Relatórios no painel para reativá-los com 1 toque no WhatsApp!_`,
+        toolsUsed,
+        cartActions,
+        provider: "local-mcp",
+      };
     }
 
     if (q.includes("estoque baixo") || q.includes("acabando") || q.includes("esgotad")) {
@@ -522,6 +593,26 @@ async function runLocalMcpFallback(params: {
   }
 
   // Modo Consumidor (Vitrine / WhatsApp)
+  if (q.includes("repetir") || q.includes("pedir de novo") || q.includes("mesmo pedido") || q.includes("ultimo pedido") || q.includes("último pedido")) {
+    toolsUsed.push("repeat_last_customer_order");
+    const repRes = await executeMcpTool("repeat_last_customer_order", {}, ctx);
+    if (!repRes.authenticated) {
+      return {
+        reply: "🔐 Para repetir seu último pedido em 1 clique, entre com seu celular e senha no topo da loja!",
+        toolsUsed,
+        cartActions,
+        provider: "local-mcp",
+      };
+    }
+    collectToolActions(repRes, cartActions, []);
+    return {
+      reply: repRes.message || "Prontinho!",
+      toolsUsed,
+      cartActions,
+      provider: "local-mcp",
+    };
+  }
+
   const cepMatch = message.match(/\b(\d{5})-?(\d{3})\b/);
   if (cepMatch) {
     toolsUsed.push("calculate_freight_by_cep");

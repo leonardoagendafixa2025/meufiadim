@@ -23,6 +23,7 @@ import {
   normalizeOrderStatus,
   type OrderStatus,
 } from "@/lib/store-features";
+import { OrderAlertsBar } from "@/components/admin/OrderAlertsBar";
 
 export interface AdminOrderItem {
   id: string;
@@ -46,12 +47,18 @@ export interface AdminOrderItem {
 }
 
 interface MerchantOrdersTabProps {
+  storeId?: string;
+  soundEnabled?: boolean;
+  onToggleSound?: () => void;
   orders: AdminOrderItem[];
   loading: boolean;
   onRefresh: () => Promise<void> | void;
 }
 
 export function MerchantOrdersTab({
+  storeId,
+  soundEnabled = true,
+  onToggleSound,
   orders,
   loading,
   onRefresh,
@@ -143,6 +150,13 @@ export function MerchantOrdersTab({
 
   return (
     <div className="space-y-4">
+      {storeId && onToggleSound && (
+        <OrderAlertsBar
+          storeId={storeId}
+          soundEnabled={soundEnabled}
+          onToggleSound={onToggleSound}
+        />
+      )}
       {/* Cabeçalho */}
       <div className="bg-white rounded-[32px] p-5 sm:p-6 border border-slate-200/70 shadow-sm shadow-slate-200/40 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>

@@ -40,6 +40,8 @@ import {
   Loader2,
   Tag,
   Award,
+  Copy,
+  BellRing,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { formatBRL } from "@/lib/whatsapp";
@@ -57,7 +59,8 @@ import {
 import { StoreCustomerOrdersModal } from "@/components/store/StoreCustomerOrdersModal";
 import { StoreSellerChatWidget } from "@/components/store/StoreSellerChatWidget";
 import { formatPhoneBR } from "@/lib/customer-auth";
-import type { LoyaltyConfig } from "@/lib/store-features";
+import { parseMagicCartParam, type LoyaltyConfig } from "@/lib/store-features";
+import { isBrowserPushSupported, subscribeBrowserPush } from "@/lib/push-client";
 
 interface Store {
   id: string;
@@ -183,7 +186,12 @@ export default function TenantStorePage() {
     merchantNotified: boolean;
     customerNotified: boolean;
     whatsappFallbackUrl?: string;
+    pixCopiaECola?: string | null;
   } | null>(null);
+  const [copiedSuccessPix, setCopiedSuccessPix] = useState(false);
+  const [successPushEnabled, setSuccessPushEnabled] = useState(false);
+  const [enablingSuccessPush, setEnablingSuccessPush] = useState(false);
+  const magicCartAppliedRef = useRef(false);
 
   // Cupons e Fidelidade
   const [couponInput, setCouponInput] = useState("");
@@ -409,6 +417,74 @@ export default function TenantStorePage() {
       })
       .catch(() => {});
   }, [store?.id, customerUser?.id]);
+
+  // Link Mágico (?cart=id:qty&coupon=CODE&delivery=retirada) preenchido pela IA / WhatsApp
+  useEffect(() => {
+    if (!store?.id || products.length === 0 || magicCartAppliedRef.current) return;
+    if (typeof window === "undefined") return;
+
+    const params = new URLSearchParams(window.location.search);
+    const cartParam = params.get("cart");
+    const couponParam = params.get("coupon");
+    const deliveryParam = params.get("delivery");
+
+    if (!cartParam && !couponParam) return;
+    magicCartAppliedRef.current = true;
+
+    const parsedItems = parseMagicCartParam(cartParam);
+    const matchedCart: { product: Product; qty: number }[] = [];
+    for (const item of parsedItems) {
+      const prod = products.find((p) => p.id === item.productId);
+      if (prod && Number(prod.stock || 0) > 0) {
+        matchedCart.push({
+          product: prod,
+          qty: Math.min(item.qty, prod.stock || 99),
+        });
+      }
+    }
+
+    if (deliveryParam === "retirada" || deliveryParam === "entrega") {
+      setDeliveryType(deliveryParam);
+    }
+
+    if (matchedCart.length > 0) {
+      setCart(matchedCart);
+      setCartOpen(true);
+      showToast("Sacola preenchida pelo Vendedor IA!");
+    }
+
+    if (couponParam && couponParam.trim()) {
+      const normCode = couponParam.trim().toUpperCase();
+      setCouponInput(normCode);
+      const subtotalForCoupon = matchedCart.reduce(
+        (acc, i) => acc + i.product.price * i.qty,
+        0
+      );
+      fetch(
+        `/api/store/promotions?storeId=${store.id}&validateCode=${encodeURIComponent(
+          normCode
+        )}&subtotal=${subtotalForCoupon}`
+      )
+        .then((res) => res.json())
+        .then((data) => {
+          const val = data?.couponValidation;
+          if (val?.valid) {
+            setAppliedCoupon({
+              code: val.code,
+              discountType: val.discountType,
+              discountValue: val.discountValue,
+              discountAmount: val.discountAmount,
+            });
+          }
+        })
+        .catch(() => {});
+    }
+
+    try {
+      const cleanUrl = `${window.location.pathname}${window.location.hash || ""}`;
+      window.history.replaceState({}, "", cleanUrl);
+    } catch {}
+  }, [store?.id, products]);
 
   // Lista de categorias únicas derivadas dos produtos e categorias configuradas
   const categories = useMemo(() => {
@@ -703,7 +779,10 @@ export default function TenantStorePage() {
         merchantNotified: Boolean(orderData.merchantNotified),
         customerNotified: Boolean(orderData.customerNotified),
         whatsappFallbackUrl,
+        pixCopiaECola: orderData.pixCopiaECola || null,
       });
+      setCopiedSuccessPix(false);
+      setSuccessPushEnabled(false);
       showToast("Pedido confirmado e enviado automaticamente!");
     } catch (err: any) {
       alert("Atenção: " + (err.message || "Não foi possível salvar seu pedido. Tente novamente."));
@@ -1966,6 +2045,36 @@ export default function TenantStorePage() {
             const el = document.getElementById("search-input");
             if (el) el.focus();
           }}
+          onRepeatOrder={(oldItems) => {
+            if (!isOpen) {
+              showToast("Esta loja está fechada no momento para novos pedidos.");
+              return;
+            }
+            const nextCart: { product: Product; qty: number }[] = [];
+            for (const oldItem of oldItems || []) {
+              let found = oldItem.id
+                ? products.find((p) => p.id === oldItem.id)
+                : undefined;
+              if (!found && oldItem.name) {
+                const q = String(oldItem.name).toLowerCase().trim();
+                found = products.find((p) => p.name.toLowerCase() === q);
+              }
+              if (found && Number(found.stock || 0) > 0) {
+                const qty = Math.min(
+                  Math.max(1, Number(oldItem.qty || 1)),
+                  found.stock || 99
+                );
+                nextCart.push({ product: found, qty });
+              }
+            }
+            if (nextCart.length === 0) {
+              showToast("Os itens deste pedido estão indisponíveis no momento.");
+              return;
+            }
+            setCart(nextCart);
+            setCartOpen(true);
+            showToast("Itens do pedido anterior colocados na sacola!");
+          }}
         />
       )}
 
@@ -2004,6 +2113,85 @@ export default function TenantStorePage() {
                 </div>
               )}
             </div>
+
+            {orderSuccessInfo.pixCopiaECola && (
+              <div className="p-3.5 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800/70 text-left space-y-2">
+                <div className="flex items-center justify-between text-xs font-black text-emerald-900 dark:text-emerald-200">
+                  <span className="flex items-center gap-1.5">
+                    <QrCode className="w-4 h-4 text-emerald-600" />
+                    Pague agora via Pix Copia e Cola
+                  </span>
+                  <span>{formatBRL(orderSuccessInfo.total)}</span>
+                </div>
+                <p className="text-[10px] font-mono text-slate-600 dark:text-slate-300 bg-white dark:bg-slate-900 p-2 rounded-xl border border-emerald-100 dark:border-emerald-900 break-all line-clamp-2">
+                  {orderSuccessInfo.pixCopiaECola}
+                </p>
+                <button
+                  type="button"
+                  onClick={() => {
+                    try {
+                      navigator.clipboard.writeText(orderSuccessInfo.pixCopiaECola!);
+                      setCopiedSuccessPix(true);
+                      setTimeout(() => setCopiedSuccessPix(false), 2500);
+                    } catch {}
+                  }}
+                  className="w-full py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs flex items-center justify-center gap-1.5 transition active:scale-[0.98]"
+                >
+                  {copiedSuccessPix ? (
+                    <>
+                      <Check className="w-4 h-4" />
+                      <span>Código Pix Copiado!</span>
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      <span>Copiar Código Pix</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            )}
+
+            {store && customerUser && isBrowserPushSupported() && (
+              <button
+                type="button"
+                disabled={enablingSuccessPush || successPushEnabled}
+                onClick={async () => {
+                  setEnablingSuccessPush(true);
+                  try {
+                    const res = await subscribeBrowserPush({
+                      storeId: store.id,
+                      role: "customer",
+                      customerId: customerUser.id,
+                    });
+                    if (res.ok) {
+                      setSuccessPushEnabled(true);
+                      try {
+                        localStorage.setItem(
+                          `meufiadim_cust_push_${store.id}_${customerUser.id}`,
+                          "1"
+                        );
+                      } catch {}
+                      showToast("Alertas em tempo real ativados neste aparelho!");
+                    } else if (res.reason) {
+                      showToast(res.reason);
+                    }
+                  } finally {
+                    setEnablingSuccessPush(false);
+                  }
+                }}
+                className="w-full py-2.5 px-3 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs flex items-center justify-center gap-1.5 transition active:scale-95"
+              >
+                <BellRing className="w-3.5 h-3.5 text-emerald-600" />
+                <span>
+                  {enablingSuccessPush
+                    ? "Ativando avisos..."
+                    : successPushEnabled
+                    ? "Avisos push ativados! ✓"
+                    : "Receber alerta push quando o pedido sair"}
+                </span>
+              </button>
+            )}
 
             {!orderSuccessInfo.merchantNotified && orderSuccessInfo.whatsappFallbackUrl && (
               <a
@@ -2058,6 +2246,10 @@ export default function TenantStorePage() {
                 }
               }
             });
+          }}
+          onOrderCreated={() => {
+            setCart([]);
+            showToast("Pedido registrado pelo Vendedor IA!");
           }}
         />
       )}

@@ -190,3 +190,56 @@ export function computeOrderDiscounts(params: {
     finalTotal,
   };
 }
+
+export interface MagicCartItem {
+  productId: string;
+  qty: number;
+}
+
+/**
+ * Codifica uma lista de produtos para abrir a sacola da vitrine já preenchida (?cart=id:qty,...).
+ */
+export function encodeMagicCartUrl(params: {
+  baseUrl: string;
+  storeSlug: string;
+  items: MagicCartItem[];
+  couponCode?: string | null;
+  deliveryType?: "entrega" | "retirada" | null;
+}): string {
+  const cleanBase = (params.baseUrl || "https://meufiadimdigital.vercel.app").replace(/\/$/, "");
+  const cleanSlug = String(params.storeSlug || "").replace(/^\/+|\/+$/g, "");
+  const encodedCart = (params.items || [])
+    .filter((i) => i.productId && Number(i.qty) > 0)
+    .slice(0, 20)
+    .map((i) => `${encodeURIComponent(i.productId)}:${Math.max(1, Math.min(50, Math.round(i.qty)))}`)
+    .join(",");
+
+  const search = new URLSearchParams();
+  if (encodedCart) search.set("cart", encodedCart);
+  if (params.couponCode && params.couponCode.trim()) {
+    search.set("coupon", params.couponCode.trim().toUpperCase());
+  }
+  if (params.deliveryType === "entrega" || params.deliveryType === "retirada") {
+    search.set("delivery", params.deliveryType);
+  }
+
+  const qs = search.toString();
+  return `${cleanBase}/${cleanSlug}${qs ? `?${qs}` : ""}`;
+}
+
+/**
+ * Decodifica o query param `?cart=id1:qty,id2:qty` de forma segura na vitrine pública.
+ */
+export function parseMagicCartParam(cartParam?: string | null): MagicCartItem[] {
+  if (!cartParam || typeof cartParam !== "string") return [];
+  const items: MagicCartItem[] = [];
+  for (const token of cartParam.split(",").slice(0, 25)) {
+    const [rawId, rawQty] = token.split(":");
+    const productId = decodeURIComponent((rawId || "").trim());
+    const qty = Math.max(1, Math.min(50, Math.round(Number(rawQty || 1) || 1)));
+    if (productId && /^[a-zA-Z0-9_-]{4,80}$/.test(productId)) {
+      items.push({ productId, qty });
+    }
+  }
+  return items;
+}

@@ -58,12 +58,21 @@ const customerOrdersRoute = fs.readFileSync(
   path.join(root, "src/app/api/store/customer/orders/route.ts"),
   "utf8"
 );
+const orderServiceCode = fs.readFileSync(
+  path.join(root, "src/lib/order-service.ts"),
+  "utf8"
+);
+const combinedOrderCheckoutCode = `${customerOrdersRoute}\n${orderServiceCode}`;
 assert.ok(
-  customerOrdersRoute.includes("computeOrderDiscounts"),
+  customerOrdersRoute.includes("createCustomerOrderCore"),
+  "Checkout da vitrine deve delegar criação de pedido para createCustomerOrderCore"
+);
+assert.ok(
+  combinedOrderCheckoutCode.includes("computeOrderDiscounts"),
   "Checkout da vitrine deve recalcular descontos de cupom/fidelidade no servidor"
 );
 assert.ok(
-  customerOrdersRoute.includes("authoritativeItemsSubtotal"),
+  combinedOrderCheckoutCode.includes("authoritativeItemsSubtotal"),
   "Checkout da vitrine deve validar preços dos produtos no servidor"
 );
 console.log("✅ 3. Proteções multi-tenant, autorização de cron e recálculo server-side validados.");

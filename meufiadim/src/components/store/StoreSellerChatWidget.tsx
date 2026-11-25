@@ -9,6 +9,9 @@ import {
   Loader2,
   MessageCircle,
   CheckCircle2,
+  QrCode,
+  Copy,
+  Check,
 } from "lucide-react";
 
 export interface CartActionItem {
@@ -19,11 +22,20 @@ export interface CartActionItem {
   qty: number;
 }
 
+export interface PixActionItem {
+  type: "pix_code";
+  code: string;
+  amount: number;
+  storeName: string;
+  orderId?: string;
+}
+
 interface ChatMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
   cartActions?: CartActionItem[];
+  pixActions?: PixActionItem[];
 }
 
 interface StoreSellerChatWidgetProps {
@@ -34,10 +46,12 @@ interface StoreSellerChatWidgetProps {
   customerId?: string | null;
   hasFloatingCartBar?: boolean;
   onCartActions?: (actions: CartActionItem[]) => void;
+  onOrderCreated?: () => void;
 }
 
 const CUSTOMER_CHIPS = [
   "Ver cardápio",
+  "Repetir último pedido",
   "Calcular frete por CEP",
   "Estão abertos?",
   "Meus pedidos",
@@ -80,15 +94,17 @@ export function StoreSellerChatWidget({
   customerId = null,
   hasFloatingCartBar = false,
   onCartActions,
+  onOrderCreated,
 }: StoreSellerChatWidgetProps) {
   const [open, setOpen] = useState(false);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [copiedPixCode, setCopiedPixCode] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: "welcome",
       role: "assistant",
-      content: `Olá! Sou o **Vendedor IA** da **${storeName}**.\nPosso ajudar você a encontrar produtos, calcular o frete pelo CEP, tirar dúvidas de entrega ou montar sua sacola!`,
+      content: `Olá! Sou o **Vendedor IA** da **${storeName}**.\nPosso ajudar você a encontrar produtos, calcular o frete pelo CEP, repetir seu último pedido, montar sua sacola ou fechar o pedido com **Pix na hora**!`,
     },
   ]);
 
@@ -144,6 +160,13 @@ export function StoreSellerChatWidget({
         onCartActions?.(cartActions);
       }
 
+      const pixActions: PixActionItem[] = Array.isArray(data.pixActions)
+        ? data.pixActions
+        : [];
+      if (pixActions.length > 0) {
+        onOrderCreated?.();
+      }
+
       setMessages((prev) => [
         ...prev,
         {
@@ -151,6 +174,7 @@ export function StoreSellerChatWidget({
           role: "assistant",
           content: data.reply || "Como posso ajudar mais?",
           cartActions,
+          pixActions,
         },
       ]);
     } catch (err) {
@@ -169,6 +193,16 @@ export function StoreSellerChatWidget({
     } finally {
       setLoading(false);
     }
+  }
+
+  function handleCopyPix(code: string) {
+    try {
+      navigator.clipboard.writeText(code);
+      setCopiedPixCode(code);
+      setTimeout(() => {
+        setCopiedPixCode((prev) => (prev === code ? null : prev));
+      }, 2500);
+    } catch {}
   }
 
   const bottomOffsetClass = hasFloatingCartBar
@@ -256,6 +290,49 @@ export function StoreSellerChatWidget({
                           </span>
                           <ShoppingBag className="w-3 h-3 shrink-0" />
                         </span>
+                      ))}
+                    </div>
+                  )}
+
+                {msg.role === "assistant" &&
+                  msg.pixActions &&
+                  msg.pixActions.length > 0 && (
+                    <div className="mt-2 flex flex-col gap-1.5 w-[88%]">
+                      {msg.pixActions.map((pix, idx) => (
+                        <div
+                          key={`pix-${idx}`}
+                          className="p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 space-y-2 shadow-xs"
+                        >
+                          <div className="flex items-center justify-between text-xs font-extrabold text-emerald-900 dark:text-emerald-200">
+                            <span className="inline-flex items-center gap-1.5">
+                              <QrCode className="w-4 h-4 text-emerald-600" />
+                              Pix Copia e Cola
+                            </span>
+                            <span>
+                              R$ {Number(pix.amount || 0).toFixed(2).replace(".", ",")}
+                            </span>
+                          </div>
+                          <p className="text-[10px] font-mono text-slate-600 dark:text-slate-300 bg-white/80 dark:bg-slate-900 p-2 rounded-xl border border-emerald-100 dark:border-emerald-900 break-all line-clamp-2">
+                            {pix.code}
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => handleCopyPix(pix.code)}
+                            className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs flex items-center justify-center gap-1.5 active:scale-[0.98] transition"
+                          >
+                            {copiedPixCode === pix.code ? (
+                              <>
+                                <Check className="w-3.5 h-3.5" />
+                                <span>Código Pix Copiado!</span>
+                              </>
+                            ) : (
+                              <>
+                                <Copy className="w-3.5 h-3.5" />
+                                <span>Copiar Código Pix</span>
+                              </>
+                            )}
+                          </button>
+                        </div>
                       ))}
                     </div>
                   )}

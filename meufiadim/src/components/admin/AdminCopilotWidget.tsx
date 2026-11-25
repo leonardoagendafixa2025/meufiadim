@@ -29,6 +29,7 @@ interface AdminCopilotWidgetProps {
 const QUICK_SUGGESTIONS = [
   "Resumo do fiado",
   "Pedidos em aberto",
+  "Clientes sumidos",
   "Estoque baixo",
   "Clientes em atraso",
   "Encomendas pendentes",
@@ -146,6 +147,7 @@ export function AdminCopilotWidget({
           [
             "create_encomenda",
             "send_whatsapp_charge",
+            "send_reactivation_whatsapp",
             "create_fiado_sale",
             "record_fiado_payment",
             "update_order_status",

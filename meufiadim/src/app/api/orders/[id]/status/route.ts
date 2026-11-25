@@ -3,8 +3,10 @@ import { getSupabaseAdmin } from "@/lib/encomendas";
 import { canMerchantAccessSystem } from "@/lib/infinitepay";
 import { cleanPhone } from "@/lib/customer-auth";
 import { getZapApiUrl, getZapApiKey } from "@/lib/whatsapp";
+import { sendWebPushToStoreTarget } from "@/lib/web-push";
 import {
   buildOrderStatusWhatsAppMessage,
+  ORDER_STATUS_META,
   VALID_ORDER_STATUSES,
   type OrderStatus,
 } from "@/lib/store-features";
@@ -40,7 +42,7 @@ export async function PATCH(
 
     const { data: store } = await supabase
       .from("stores")
-      .select("id, name, owner_id")
+      .select("id, name, slug, owner_id")
       .eq("owner_id", user.id)
       .maybeSingle();
 
@@ -143,11 +145,31 @@ export async function PATCH(
       }
     }
 
+    let customerPushSent = false;
+    if (customer?.id && nextStatus !== "RECEBIDO") {
+      const statusMeta = ORDER_STATUS_META[nextStatus];
+      const statusLabel =
+        deliveryType === "retirada" && statusMeta.pickupLabel
+          ? statusMeta.pickupLabel
+          : statusMeta.label;
+      const pushRes = await sendWebPushToStoreTarget({
+        storeId: store.id,
+        role: "customer",
+        customerId: customer.id,
+        title: `${store.name} — ${statusLabel}`,
+        body: `Seu pedido agora está: ${statusLabel}. Toque para acompanhar.`,
+        url: `/${store.slug}`,
+        tag: `order-status-${orderId}`,
+      });
+      customerPushSent = pushRes.sent > 0;
+    }
+
     return NextResponse.json({
       ok: true,
       orderId,
       status: nextStatus,
       customerNotified,
+      customerPushSent,
     });
   } catch (err: any) {
     return NextResponse.json(

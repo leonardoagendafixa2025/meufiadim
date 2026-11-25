@@ -15,10 +15,18 @@ import {
 } from "@/lib/viacep";
 import {
   buildOrderStatusWhatsAppMessage,
+  ORDER_STATUS_META,
+  encodeMagicCartUrl,
   normalizeOrderStatus,
   VALID_ORDER_STATUSES,
   type OrderStatus,
 } from "@/lib/store-features";
+import { createCustomerOrderCore, getAppPublicBaseUrl } from "@/lib/order-service";
+import {
+  analyzeDormantCustomers,
+  buildReactivationWhatsAppMessage,
+} from "@/lib/crm-radar";
+import { sendWebPushToStoreTarget } from "@/lib/web-push";
 
 export type MCPUserRole = "merchant" | "customer";
 
@@ -853,12 +861,13 @@ export const MCP_TOOLS: MCPToolDefinition[] = [
         ? targetOrder.customer[0]
         : targetOrder.customer;
       let notified = false;
+      const deliveryType =
+        targetOrder.delivery_type ||
+        info.meta?.order_details?.[targetOrder.id]?.delivery_type ||
+        null;
+
       if (cust?.phone) {
         try {
-          const deliveryType =
-            targetOrder.delivery_type ||
-            info.meta?.order_details?.[targetOrder.id]?.delivery_type ||
-            null;
           const msgText = buildOrderStatusWhatsAppMessage({
             customerName: cust.name,
             storeName: info.store.name,
@@ -877,12 +886,32 @@ export const MCP_TOOLS: MCPToolDefinition[] = [
         } catch {}
       }
 
+      let pushSent = false;
+      if (cust?.id && nextStatus !== "RECEBIDO") {
+        const statusMeta = ORDER_STATUS_META[nextStatus];
+        const statusLabel =
+          deliveryType === "retirada" && statusMeta.pickupLabel
+            ? statusMeta.pickupLabel
+            : statusMeta.label;
+        const pushRes = await sendWebPushToStoreTarget({
+          storeId: ctx.storeId,
+          role: "customer",
+          customerId: cust.id,
+          title: `${info.store.name} — ${statusLabel}`,
+          body: `Seu pedido agora está: ${statusLabel}. Toque para acompanhar.`,
+          url: `/${info.store.slug}`,
+          tag: `order-status-${targetOrder.id}`,
+        });
+        pushSent = pushRes.sent > 0;
+      }
+
       return {
         ok: true,
         orderId: targetOrder.id,
         status: nextStatus,
         customerName: cust?.name || "Cliente",
         customerNotified: notified,
+        customerPushSent: pushSent,
         message: `Pedido de ${cust?.name || "Cliente"} atualizado para ${nextStatus}${notified ? " e cliente avisado no WhatsApp!" : "."}`,
       };
     },
@@ -1193,6 +1222,514 @@ export const MCP_TOOLS: MCPToolDefinition[] = [
           qty,
         },
         message: `${qty}x ${product.name} (${formatBRL(Number(product.price) * qty)}) adicionado à sua sacola!`,
+      };
+    },
+  },
+  {
+    name: "build_magic_cart_link",
+    description:
+      "Monta um Link Mágico da vitrine com a sacola já preenchida com os produtos solicitados (ideal para enviar no WhatsApp ou preencher múltiplos itens na vitrine).",
+    roles: ["customer"],
+    inputSchema: {
+      type: "object",
+      properties: {
+        items: {
+          type: "array",
+          description: "Lista de produtos desejados com productId ou productName e qty.",
+          items: {
+            type: "object",
+            properties: {
+              productId: { type: "string", description: "ID do produto" },
+              productName: { type: "string", description: "Nome do produto" },
+              qty: { type: "number", description: "Quantidade" },
+            },
+          },
+        },
+        couponCode: {
+          type: "string",
+          description: "Código de cupom opcional para já aplicar no link.",
+        },
+        deliveryType: {
+          type: "string",
+          description: "Modalidade opcional: entrega ou retirada.",
+        },
+      },
+      required: ["items"],
+    },
+    execute: async (args, ctx) => {
+      const rawItems = Array.isArray(args.items) ? args.items : [];
+      if (rawItems.length === 0) {
+        return { ok: false, error: "Informe pelo menos um produto para montar a sacola." };
+      }
+
+      const supabase = getSupabaseAdmin();
+      const [{ data: store }, { data: products }] = await Promise.all([
+        supabase.from("stores").select("id, name, slug").eq("id", ctx.storeId).maybeSingle(),
+        supabase.from("products").select("id, name, price, stock").eq("store_id", ctx.storeId),
+      ]);
+
+      if (!store) return { ok: false, error: "Loja não encontrada." };
+
+      const list = products || [];
+      const cartActions: any[] = [];
+      const linkItems: Array<{ productId: string; qty: number }> = [];
+      let subtotal = 0;
+
+      for (const reqItem of rawItems) {
+        const qty = Math.max(1, Math.min(50, Math.round(Number(reqItem?.qty || 1))));
+        let prod = reqItem?.productId
+          ? list.find((p) => p.id === reqItem.productId)
+          : null;
+        if (!prod && reqItem?.productName) {
+          const q = String(reqItem.productName).toLowerCase().trim();
+          prod = list.find((p) => p.name.toLowerCase().includes(q)) || null;
+        }
+        if (prod) {
+          const price = Number(prod.price || 0);
+          subtotal += price * qty;
+          linkItems.push({ productId: prod.id, qty });
+          cartActions.push({
+            type: "add_to_cart",
+            productId: prod.id,
+            productName: prod.name,
+            price,
+            qty,
+          });
+        }
+      }
+
+      if (linkItems.length === 0) {
+        return {
+          ok: false,
+          error: "Nenhum dos produtos informados foi encontrado no catálogo desta loja.",
+        };
+      }
+
+      const deliveryType =
+        args.deliveryType === "retirada" || args.deliveryType === "entrega"
+          ? args.deliveryType
+          : null;
+
+      const magicUrl = encodeMagicCartUrl({
+        baseUrl: getAppPublicBaseUrl(),
+        storeSlug: store.slug,
+        items: linkItems,
+        couponCode: args.couponCode ? String(args.couponCode) : null,
+        deliveryType,
+      });
+
+      return {
+        ok: true,
+        url: magicUrl,
+        subtotalFormatted: formatBRL(subtotal),
+        itemsCount: linkItems.reduce((acc, i) => acc + i.qty, 0),
+        cartActions,
+        message: `Sacola pronta (${formatBRL(subtotal)}). Link para abrir e finalizar em 1 clique: ${magicUrl}`,
+      };
+    },
+  },
+  {
+    name: "repeat_last_customer_order",
+    description:
+      "Recupera o último pedido do cliente autenticado e coloca os itens disponíveis novamente na sacola + gera Link Mágico de recompra.",
+    roles: ["customer"],
+    inputSchema: {
+      type: "object",
+      properties: {},
+    },
+    execute: async (_args, ctx) => {
+      if (!ctx.customerId) {
+        return {
+          authenticated: false,
+          message:
+            "O cliente precisa estar conectado com celular e senha (ou falando do WhatsApp cadastrado) para repetir o último pedido.",
+        };
+      }
+
+      const supabase = getSupabaseAdmin();
+      const [{ data: store }, { data: sales }, { data: products }] = await Promise.all([
+        supabase.from("stores").select("id, name, slug").eq("id", ctx.storeId).maybeSingle(),
+        supabase
+          .from("sales")
+          .select("id, items, description, total_amount, created_at, order_status")
+          .eq("store_id", ctx.storeId)
+          .eq("customer_id", ctx.customerId)
+          .order("created_at", { ascending: false })
+          .limit(10),
+        supabase.from("products").select("id, name, price, stock").eq("store_id", ctx.storeId),
+      ]);
+
+      if (!store) return { ok: false, error: "Loja não encontrada." };
+
+      const lastWithItems = (sales || []).find(
+        (s: any) =>
+          String(s.order_status || "").toUpperCase() !== "CANCELADO" &&
+          Array.isArray(s.items) &&
+          s.items.length > 0
+      );
+
+      if (!lastWithItems) {
+        return {
+          ok: false,
+          authenticated: true,
+          message: "Você ainda não possui um pedido anterior com itens detalhados para repetir.",
+        };
+      }
+
+      const catalog = products || [];
+      const cartActions: any[] = [];
+      const linkItems: Array<{ productId: string; qty: number }> = [];
+      const unavailable: string[] = [];
+      let subtotal = 0;
+
+      for (const oldItem of lastWithItems.items) {
+        const qty = Math.max(1, Math.min(50, Math.round(Number(oldItem.qty || 1))));
+        let prod = oldItem.id ? catalog.find((p) => p.id === oldItem.id) : null;
+        if (!prod && oldItem.name) {
+          const q = String(oldItem.name).toLowerCase().trim();
+          prod = catalog.find((p) => p.name.toLowerCase() === q) || null;
+        }
+        if (prod && Number(prod.stock || 0) > 0) {
+          const finalQty = Math.min(qty, Number(prod.stock || qty));
+          const price = Number(prod.price || 0);
+          subtotal += price * finalQty;
+          linkItems.push({ productId: prod.id, qty: finalQty });
+          cartActions.push({
+            type: "add_to_cart",
+            productId: prod.id,
+            productName: prod.name,
+            price,
+            qty: finalQty,
+          });
+        } else {
+          unavailable.push(String(oldItem.name || "Item"));
+        }
+      }
+
+      if (linkItems.length === 0) {
+        return {
+          ok: false,
+          authenticated: true,
+          message: "Os itens do seu último pedido estão sem estoque no momento.",
+        };
+      }
+
+      const magicUrl = encodeMagicCartUrl({
+        baseUrl: getAppPublicBaseUrl(),
+        storeSlug: store.slug,
+        items: linkItems,
+      });
+
+      return {
+        ok: true,
+        authenticated: true,
+        url: magicUrl,
+        subtotalFormatted: formatBRL(subtotal),
+        unavailableItems: unavailable,
+        cartActions,
+        message: `Último pedido recarregado (${cartActions
+          .map((c) => `${c.qty}x ${c.productName}`)
+          .join(", ")}) — Subtotal atual: ${formatBRL(subtotal)}. Link pronto: ${magicUrl}`,
+      };
+    },
+  },
+  {
+    name: "create_conversational_order_pix",
+    description:
+      "Fecha um pedido completo diretamente pelo chat para o cliente autenticado (calcula frete/cupom no servidor, baixa estoque, avisa lojista no WhatsApp + Push e gera Pix Copia e Cola pronto).",
+    roles: ["customer"],
+    inputSchema: {
+      type: "object",
+      properties: {
+        items: {
+          type: "array",
+          description: "Itens confirmados pelo cliente (productId ou productName e qty).",
+          items: {
+            type: "object",
+            properties: {
+              productId: { type: "string", description: "ID do produto" },
+              productName: { type: "string", description: "Nome do produto" },
+              qty: { type: "number", description: "Quantidade" },
+            },
+          },
+        },
+        paymentMethod: {
+          type: "string",
+          description: "Forma de pagamento confirmada: Pix, Fiado, Cartão ou Dinheiro.",
+        },
+        deliveryType: {
+          type: "string",
+          description: "Modalidade: entrega ou retirada.",
+        },
+        cep: {
+          type: "string",
+          description: "CEP opcional para calcular frete se for entrega.",
+        },
+        address: {
+          type: "string",
+          description: "Endereço completo opcional (rua, número, bairro).",
+        },
+        couponCode: {
+          type: "string",
+          description: "Código de cupom opcional.",
+        },
+        notes: {
+          type: "string",
+          description: "Observações opcionais do cliente.",
+        },
+      },
+      required: ["items", "paymentMethod", "deliveryType"],
+    },
+    execute: async (args, ctx) => {
+      if (!ctx.customerId) {
+        return {
+          ok: false,
+          authenticated: false,
+          error:
+            "Para fechar o pedido direto por aqui, o cliente precisa estar conectado com celular e senha (ou podemos montar o Link Mágico de sacola para ele finalizar na vitrine).",
+        };
+      }
+
+      const rawItems = Array.isArray(args.items) ? args.items : [];
+      if (rawItems.length === 0) {
+        return { ok: false, error: "Informe os itens do pedido." };
+      }
+
+      const deliveryType =
+        String(args.deliveryType || "retirada").toLowerCase() === "entrega"
+          ? "entrega"
+          : "retirada";
+
+      let freightFee = 0;
+      let resolvedAddress = args.address ? String(args.address).trim() : "";
+
+      if (deliveryType === "entrega" && args.cep) {
+        const digits = cleanCep(String(args.cep));
+        if (digits.length === 8) {
+          const info = await getStoreWithOwnerMetadata(ctx.storeId);
+          const viaCep = await fetchViaCep(digits);
+          if (info && viaCep) {
+            const freightRes = calculateDeliveryFee({
+              neighborhoodName: viaCep.bairro,
+              cep: digits,
+              neighborhoods: info.meta.delivery_neighborhoods || [],
+              cepRanges: info.meta.delivery_cep_ranges || [],
+            });
+            if (!freightRes.found) {
+              return {
+                ok: false,
+                error:
+                  freightRes.message ||
+                  "Não entregamos neste CEP. Confirme outro endereço ou escolha Retirar na loja.",
+              };
+            }
+            freightFee = Number(freightRes.fee || 0);
+            if (!resolvedAddress) {
+              resolvedAddress = `📍 ${viaCep.logradouro || "CEP " + formatCep(digits)} - ${
+                viaCep.bairro || viaCep.localidade
+              } (CEP ${formatCep(digits)})`;
+            }
+          }
+        }
+      }
+
+      const result = await createCustomerOrderCore({
+        storeId: ctx.storeId,
+        customerId: ctx.customerId,
+        paymentMethod: String(args.paymentMethod || "Pix"),
+        deliveryType,
+        freightFee,
+        address:
+          deliveryType === "retirada"
+            ? "🏬 Retirada no balcão da loja"
+            : resolvedAddress || "Endereço informado no chat",
+        notes: args.notes ? String(args.notes) : "Pedido fechado via Vendedor IA",
+        couponCode: args.couponCode ? String(args.couponCode) : null,
+        items: rawItems.map((i: any) => ({
+          id: i.productId || i.id,
+          name: i.productName || i.name,
+          qty: Number(i.qty || 1),
+        })),
+        requireMatchedCatalogItems: true,
+      });
+
+      if (!result.ok) {
+        return { ok: false, error: result.error };
+      }
+
+      return {
+        ok: true,
+        orderId: result.sale.id,
+        finalTotal: result.finalTotal,
+        finalTotalFormatted: formatBRL(result.finalTotal),
+        pixCopiaECola: result.pixCopiaECola,
+        ...(result.pixCopiaECola
+          ? {
+              pixAction: {
+                type: "pix_code",
+                code: result.pixCopiaECola,
+                amount: result.finalTotal,
+                storeName: result.storeName,
+                orderId: result.sale.id,
+              },
+            }
+          : {}),
+        message: result.pixCopiaECola
+          ? `Pedido #${String(result.sale.id).slice(0, 8)} confirmado! Total: ${formatBRL(
+              result.finalTotal
+            )}. Código Pix Copia e Cola gerado: ${result.pixCopiaECola}`
+          : `Pedido #${String(result.sale.id).slice(0, 8)} confirmado com sucesso! Total: ${formatBRL(
+              result.finalTotal
+            )}.`,
+      };
+    },
+  },
+  {
+    name: "list_dormant_customers",
+    description:
+      "CRM Preditivo: lista clientes sumidos que já compraram antes e estão sem pedir há X dias (padrão 21 dias), com valor histórico e último pedido.",
+    roles: ["merchant"],
+    inputSchema: {
+      type: "object",
+      properties: {
+        inactiveDays: {
+          type: "number",
+          description: "Mínimo de dias sem comprar (padrão 21).",
+        },
+      },
+    },
+    execute: async (args, ctx) => {
+      const inactiveDays = Math.max(1, Math.min(180, Number(args.inactiveDays ?? 21)));
+      const supabase = getSupabaseAdmin();
+      const [custRes, salesRes] = await Promise.all([
+        supabase
+          .from("customers")
+          .select("id, name, phone, balance")
+          .eq("store_id", ctx.storeId),
+        supabase
+          .from("sales")
+          .select("id, customer_id, total_amount, description, items, order_status, created_at")
+          .eq("store_id", ctx.storeId)
+          .order("created_at", { ascending: false }),
+      ]);
+
+      const dormant = analyzeDormantCustomers({
+        customers: custRes.data || [],
+        sales: salesRes.data || [],
+        inactiveDays,
+      });
+
+      return {
+        inactiveDays,
+        count: dormant.length,
+        customers: dormant.slice(0, 15),
+      };
+    },
+  },
+  {
+    name: "send_reactivation_whatsapp",
+    description:
+      "Envia mensagem personalizada no WhatsApp (com cupom opcional) para reativar um cliente sumido cadastrado na loja.",
+    roles: ["merchant"],
+    inputSchema: {
+      type: "object",
+      properties: {
+        customerQuery: {
+          type: "string",
+          description: "Nome, ID ou telefone do cliente que receberá o convite de retorno.",
+        },
+        couponCode: {
+          type: "string",
+          description: "Cupom opcional da loja para incentivar a volta (ex: VOLTA10).",
+        },
+      },
+      required: ["customerQuery"],
+    },
+    execute: async (args, ctx) => {
+      const access = await canMerchantAccessSystem(ctx.storeId);
+      if (!access.allowed) {
+        return { error: access.reason || "Loja bloqueada operacionalmente." };
+      }
+
+      const supabase = getSupabaseAdmin();
+      const [{ data: store }, { data: customers }] = await Promise.all([
+        supabase.from("stores").select("id, name, slug").eq("id", ctx.storeId).single(),
+        supabase.from("customers").select("id, name, phone").eq("store_id", ctx.storeId),
+      ]);
+
+      if (!store) return { error: "Loja não encontrada." };
+
+      const q = String(args.customerQuery || "").trim();
+      const digits = cleanPhone(q);
+      const customer = (customers || []).find(
+        (c) =>
+          c.id === q ||
+          c.name.toLowerCase().includes(q.toLowerCase()) ||
+          (digits.length >= 6 && (c.phone || "").includes(digits))
+      );
+
+      if (!customer) {
+        return { error: `Cliente "${q}" não encontrado nesta loja.` };
+      }
+      if (!customer.phone) {
+        return { error: `${customer.name} não possui telefone cadastrado.` };
+      }
+
+      const { data: lastSales } = await supabase
+        .from("sales")
+        .select("description, created_at")
+        .eq("store_id", ctx.storeId)
+        .eq("customer_id", customer.id)
+        .order("created_at", { ascending: false })
+        .limit(1);
+
+      const lastOrder = lastSales?.[0];
+      const daysSince = lastOrder?.created_at
+        ? Math.max(
+            1,
+            Math.floor(
+              (Date.now() - new Date(lastOrder.created_at).getTime()) /
+                (24 * 60 * 60 * 1000)
+            )
+          )
+        : undefined;
+
+      const coupon = args.couponCode ? String(args.couponCode).trim().toUpperCase() : null;
+      const storeUrl = `${getAppPublicBaseUrl()}/${store.slug}${
+        coupon ? `?coupon=${encodeURIComponent(coupon)}` : ""
+      }`;
+
+      const msgText = buildReactivationWhatsAppMessage({
+        customerName: customer.name,
+        storeName: store.name,
+        storeUrl,
+        lastOrderDescription: lastOrder?.description,
+        couponCode: coupon,
+        daysSince,
+      });
+
+      const res = await fetch(`${getZapApiUrl()}/send`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-api-key": getZapApiKey(),
+        },
+        body: JSON.stringify({
+          phone: cleanPhone(customer.phone),
+          text: msgText,
+        }),
+      });
+
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        return { error: data.error || "Erro ao enviar mensagem pelo WhatsApp." };
+      }
+
+      return {
+        ok: true,
+        message: `Mensagem de reativação enviada no WhatsApp para ${customer.name} (${formatPhoneBR(
+          customer.phone
+        )})${coupon ? ` com cupom ${coupon}` : ""}!`,
       };
     },
   },
