@@ -32,10 +32,10 @@ function buildSystemPrompt(ctx: MCPToolContext, storeName?: string): string {
 
   if (ctx.role === "merchant") {
     return [
-      `Você é o Copiloto IA oficial da loja "${storeName || "MEU FIADIM"}" no painel administrativo do MEU FIADIM.`,
+      `Você é o Assistente oficial da loja "${storeName || "MEU FIADIM"}" no MEU FIADIM.`,
       `Data de hoje em Brasília: ${today}.`,
       `Você conversa com o LOJISTA dono do negócio em português do Brasil claro, direto, amigável e prático.`,
-      `Use SEMPRE suas ferramentas MCP reais para consultar números, clientes, saldos, encomendas e cardápio — nunca invente valores ou clientes.`,
+      `Use SEMPRE suas ferramentas para consultar números, clientes, saldos, encomendas e cardápio — nunca invente valores ou clientes.`,
       `REGRA DE SEGURANÇA PARA AÇÕES SENSÍVEIS:`,
       `- Para ações de escrita ou envio no WhatsApp (create_encomenda, send_whatsapp_charge), se o usuário já informou explicitamente todos os dados e pediu para executar, execute; se faltar algum dado obrigatório (ex: valor ou data combinada de pagamento) ou se for um comando ambíguo, peça confirmação antes de chamar a tool.`,
       `- Nunca altere comissões da plataforma nem prometa recursos inexistentes.`,
@@ -368,7 +368,7 @@ async function runLocalMcpFallback(params: {
         `• 📦 Encomendas em aberto: *${sum.pendingEncomendasCount}* (${sum.pendingEncomendasAmountFormatted}) — ${sum.lateEncomendasCount} atrasadas`,
         `• 🛍️ Produtos ativos: *${sum.totalProducts}*`,
         ``,
-        `_Você pode perguntar: "quem está atrasado?", "clientes devendo", "listar produtos" (ou adicione GEMINI_API_KEY para conversas 100% livres!)._`,
+        `_Dica: pergunte também "quem está atrasado?", "clientes devendo" ou "listar produtos"._`,
       ].join("\n"),
       toolsUsed,
       cartActions,

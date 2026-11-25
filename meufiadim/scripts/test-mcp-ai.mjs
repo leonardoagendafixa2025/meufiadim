@@ -108,7 +108,16 @@ assert.ok(
   aiAgentCode.includes("if (entries.length === 0)"),
   "Conversão Gemini deve omitir parameters quando a tool não possui propriedades"
 );
-console.log("✅ 4. JSON-RPC MCP, proteção IDOR e schema Gemini validados.");
+assert.ok(
+  !aiAgentCode.includes("adicione GEMINI_API_KEY"),
+  "Mensagens aos usuários não devem citar GEMINI_API_KEY"
+);
+const zapWebhookCode = fs.readFileSync(path.join(root, "src/app/api/ai/whatsapp/route.ts"), "utf8");
+assert.ok(
+  !zapWebhookCode.includes("*Copiloto "),
+  "Mensagens do WhatsApp não devem exibir o termo técnico Copiloto"
+);
+console.log("✅ 4. JSON-RPC MCP, proteção IDOR, schema Gemini e textos WhatsApp validados.");
 
 // 5. Validar integração do Baileys WhatsApp Bot
 const zapCode = fs.readFileSync(path.join(repoRoot, "meufiadim-zap/index.js"), "utf8");

@@ -64,7 +64,7 @@ export async function POST(req: Request) {
         ok: true,
         shouldReply: true,
         role: "merchant",
-        reply: `🤖 *Copiloto ${merchantStore.name}*\n\n${result.reply}`,
+        reply: `🏪 *${merchantStore.name}*\n\n${result.reply}`,
       });
     }
 
