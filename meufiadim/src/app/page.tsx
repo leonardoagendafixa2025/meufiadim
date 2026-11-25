@@ -99,7 +99,7 @@ export default function LandingPage() {
     },
     {
       q: "Existe mensalidade fixa ou taxa de adesão?",
-      a: "Zero mensalidade fixa! Você não paga nada para criar sua loja, subir produtos, usar IA, cupons ou relatórios. Cobramos apenas 5% sobre as vendas registradas na plataforma — se não vender, não paga nada.",
+      a: "Zero mensalidade fixa! Você não paga nada para criar sua loja, subir produtos, usar IA, cupons ou relatórios. Cobramos apenas 10% sobre as vendas registradas na plataforma — se não vender, não paga nada.",
     },
     {
       q: "Funciona no celular sem precisar baixar nada?",
@@ -109,7 +109,7 @@ export default function LandingPage() {
 
   const recuperacaoEstimada = Math.round(fiadoMensal * 0.94);
   const horasEconomizadas = Math.round((fiadoMensal / 300) * 1.8);
-  const taxaPlataforma = Math.round(fiadoMensal * 0.05);
+  const taxaPlataforma = Math.round(fiadoMensal * 0.10);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans selection:bg-emerald-500 selection:text-white">
@@ -138,7 +138,7 @@ export default function LandingPage() {
               Simulador
             </a>
             <a href="#precos" className="hover:text-emerald-600 transition">
-              Preço (5%)
+              Preço
             </a>
             <a href="#faq" className="hover:text-emerald-600 transition">
               FAQ
@@ -234,7 +234,7 @@ export default function LandingPage() {
               </div>
               <div className="flex items-center gap-1.5">
                 <Check className="w-4 h-4 text-emerald-600 font-bold" />
-                <span>Apenas 5% quando vender</span>
+                <span>Apenas 10% quando vender</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <Check className="w-4 h-4 text-emerald-600 font-bold" />
@@ -323,7 +323,7 @@ export default function LandingPage() {
             </div>
             <div className="pt-4 md:pt-0">
               <p className="text-3xl sm:text-4xl font-extrabold text-emerald-400 tracking-tight">
-                5%
+                10%
               </p>
               <p className="text-xs sm:text-sm text-slate-400 mt-1 font-medium">
                 Apenas sobre as vendas que você fechar
@@ -617,7 +617,7 @@ export default function LandingPage() {
         </section>
 
         {/* ========================================================================= */}
-        {/* SIMULADOR DE GANHOS E RECUPERAÇÃO (5%)                                   */}
+        {/* SIMULADOR DE GANHOS E RECUPERAÇÃO (10%)                                  */}
         {/* ========================================================================= */}
         <section
           id="simulador"
@@ -689,7 +689,7 @@ export default function LandingPage() {
 
             <div className="bg-slate-50 border border-slate-200/70 rounded-2xl p-5 space-y-1">
               <p className="text-xs text-slate-600 font-bold uppercase">
-                Comissão da Plataforma (5%)
+                Comissão da Plataforma (10%)
               </p>
               <p className="text-2xl sm:text-3xl font-extrabold text-slate-900">
                 R$ {taxaPlataforma.toLocaleString("pt-BR")}
@@ -798,7 +798,7 @@ export default function LandingPage() {
         </section>
 
         {/* ========================================================================= */}
-        {/* PREÇO TRANSPARENTE (5%)                                                   */}
+        {/* PREÇO TRANSPARENTE (10%)                                                  */}
         {/* ========================================================================= */}
         <section id="precos" className="max-w-3xl mx-auto text-center space-y-8">
           <div className="space-y-3">
@@ -830,7 +830,7 @@ export default function LandingPage() {
               </div>
               <p className="text-sm text-emerald-700 font-extrabold mt-1.5 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                Apenas 5% sobre as vendas registradas na plataforma
+                Apenas 10% sobre as vendas registradas na plataforma
               </p>
             </div>
 
