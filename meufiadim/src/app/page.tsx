@@ -10,28 +10,25 @@ import {
   MessageCircle,
   BookOpen,
   Palette,
-  CheckCircle2,
   Zap,
-  Clock,
-  Smartphone,
-  Store,
-  QrCode,
   TrendingUp,
   ChevronDown,
-  Star,
-  Users,
   ShoppingBag,
-  BadgePercent,
   Check,
-  CheckCheck,
-  ArrowUpRight,
-  BadgeAlert,
-  Wallet,
-  Play,
+  Bot,
+  Bike,
+  Tag,
+  Award,
+  BarChart3,
+  CalendarClock,
+  ChefHat,
+  CheckCircle2,
+  BellRing,
+  MapPin,
+  AlertTriangle,
 } from "lucide-react";
 import { HeroVideo } from "@/components/HeroVideo";
 
-// Variantes de animação suaves
 const fadeIn: Variants = {
   hidden: { opacity: 0, y: 20 },
   visible: { opacity: 1, y: 0, transition: { duration: 0.6, ease: "easeOut" } },
@@ -42,88 +39,86 @@ const staggerContainer: Variants = {
   visible: {
     opacity: 1,
     transition: {
-      staggerChildren: 0.12,
+      staggerChildren: 0.1,
     },
   },
 };
 
 export default function LandingPage() {
-  // Simulador de Fiado
   const [fiadoMensal, setFiadoMensal] = useState<number>(3500);
-
-  // FAQ Accordion
   const [openFaq, setOpenFaq] = useState<number | null>(null);
-
-  // Segmentos selecionados
   const [activeSegment, setActiveSegment] = useState<number>(0);
 
   const segmentos = [
     {
       title: "Mercadinhos & Mercearias",
-      desc: "Anote o pão, o leite e a compra do mês. No dia do pagamento, o cliente recebe o extrato com o Pix Copia e Cola pronto.",
+      desc: "Anote o fiado com limite por cliente, controle estoque baixo com 1 clique e envie cobrança automática com Pix Copia e Cola no WhatsApp.",
       badge: "Mais Popular",
-      metric: "+42% de recebimento no prazo",
+      metric: "+42% recebimento no prazo",
     },
     {
-      title: "Lojas de Roupas & Calçados",
-      desc: "Venda na confiança para suas clientes fiéis, defina limites de crédito personalizados e controle quem pode comprar mais.",
-      badge: "Varejo",
-      metric: "Zero atrito na cobrança",
+      title: "Marmitarias, Adegas & Lanches",
+      desc: "Vitrine rápida com cálculo de frete por CEP/bairro, rastreamento ao vivo estilo iFood (Em preparo → Saiu p/ entrega) e aviso automático no Zap.",
+      badge: "Delivery & Balcão",
+      metric: "Zero pergunta repetida no Zap",
     },
     {
-      title: "Marmitarias & Restaurantes",
-      desc: "Fechamento semanal ou mensal de marmitas para empresas e vizinhos. Notificações automáticas direto no WhatsApp.",
-      badge: "Alimentação",
-      metric: "Economia de 15h por semana",
+      title: "Lojas de Roupas & Varejo",
+      desc: "Crie cupons de desconto, ative cartão fidelidade por celular e venda no crediário/encomenda sabendo exatamente quando cada cliente vence.",
+      badge: "Fidelidade & Cupons",
+      metric: "Clientes compram mais vezes",
     },
     {
-      title: "Autônomos & Revendedores",
-      desc: "Para quem vende cosméticos, perfumes e produtos por catálogo. Sua vitrine virtual com fotos em alta definição para mandar no Zap.",
-      badge: "Empreendedores",
-      metric: "Profissionalismo total",
+      title: "Encomendas & Autônomos",
+      desc: "Agende encomendas para datas futuras com pagamento programado, deixe o Vendedor IA tirar dúvidas 24h e receba direto no seu Pix.",
+      badge: "IA 24 Horas",
+      metric: "Atendimento até fora do horário",
     },
   ];
 
   const faqs = [
     {
       q: "Preciso ter CNPJ para usar o meufiadim?",
-      a: "Não! O meufiadim foi feito especialmente para comerciantes, autônomos e pequenos negócios. Você pode se cadastrar e receber tanto com CPF quanto com CNPJ.",
+      a: "Não! O meufiadim foi feito para comerciantes locais, autônomos, lanchonetes e pequenos negócios. Você pode se cadastrar e cadastrar sua chave Pix usando CPF, CNPJ, e-mail ou celular.",
     },
     {
-      q: "O dinheiro do Pix cai na minha conta?",
-      a: "Sim, 100%! O Pix gerado para os seus clientes de fiado contém a sua própria chave Pix cadastrada no painel. O dinheiro vai direto do cliente para a sua conta bancária sem intermediação.",
+      q: "O dinheiro das vendas e do Pix cai direto na minha conta?",
+      a: "Sim, 100%! Todo código Pix enviado aos seus clientes pelo robô usa a sua própria chave Pix cadastrada no painel. O valor vai direto da conta do cliente para a sua conta bancária sem intermediários.",
     },
     {
-      q: "Como funciona a cobrança automática no WhatsApp?",
-      a: "Nosso robô inteligente dispara uma mensagem educada e personalizada no dia do vencimento combinado com o seu cliente, contendo o valor exato em aberto e o botão 'Copiar código Pix'. O cliente só clica, cola no banco dele e paga.",
+      q: "Como funcionam o Vendedor IA e o Assistente no WhatsApp?",
+      a: "Na sua vitrine online, um Vendedor IA atende clientes 24h respondendo dúvidas de cardápio, calculando frete por CEP e adicionando itens direto na sacola. Para você lojista, o Assistente no painel e no WhatsApp mostra quem está devendo, estoque baixo, pedidos abertos e até anota vendas no fiado por texto.",
     },
     {
-      q: "Existe alguma mensalidade ou taxa fixa?",
-      a: "Não cobramos nenhuma mensalidade fixa. Nosso modelo é ganha-ganha: cobramos apenas uma pequena porcentagem (10%) sobre o valor das vendas que você registrar na plataforma. Se você não vender, não paga nada.",
+      q: "Como funciona o rastreamento ao vivo dos pedidos?",
+      a: "Quando o cliente pede na sua vitrine, você avança o status com 1 clique no painel (Recebido → Em Preparo → Saiu para Entrega / Pronto p/ Retirada → Entregue). O cliente acompanha a barra em tempo real e recebe aviso automático no WhatsApp a cada mudança.",
     },
     {
-      q: "O meufiadim funciona no celular?",
-      a: "Perfeitamente! O meufiadim é um PWA (Progressive Web App) ultra-rápido. Você pode instalá-lo como aplicativo na tela inicial do seu celular (Android ou iPhone) ou acessar direto pelo navegador no computador.",
+      q: "Como funciona a Régua Automática de Cobrança de Fiado?",
+      a: "Você escolhe no painel se quer lembrar o cliente alguns dias antes do vencimento, no dia exato e após X dias de atraso. Todos os dias às 09h o robô envia mensagens educadas (sem repetir no mesmo dia) já com o Pix Copia e Cola pronto.",
     },
     {
-      q: "Meus clientes precisam baixar algum aplicativo?",
-      a: "Não! Seus clientes não precisam instalar nada. Eles recebem o link da sua vitrine pelo WhatsApp, escolhem os produtos e recebem os lembretes de cobrança direto no próprio WhatsApp que já usam todo dia.",
+      q: "Existe mensalidade fixa ou taxa de adesão?",
+      a: "Zero mensalidade fixa! Você não paga nada para criar sua loja, subir produtos, usar IA, cupons ou relatórios. Cobramos apenas 5% sobre as vendas registradas na plataforma — se não vender, não paga nada.",
+    },
+    {
+      q: "Funciona no celular sem precisar baixar nada?",
+      a: "Sim! O sistema é 100% online e instalável como aplicativo (PWA) no Android, iPhone ou computador. Seus clientes também não precisam instalar nada — compram direto pelo link da sua loja e acompanham tudo no celular e no WhatsApp.",
     },
   ];
 
-  // Cálculos do simulador
   const recuperacaoEstimada = Math.round(fiadoMensal * 0.94);
-  const horasEconomizadas = Math.round((fiadoMensal / 300) * 1.5);
-  const taxaPlataforma = Math.round(fiadoMensal * 0.10);
+  const horasEconomizadas = Math.round((fiadoMensal / 300) * 1.8);
+  const taxaPlataforma = Math.round(fiadoMensal * 0.05);
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] text-slate-900 font-sans selection:bg-emerald-500 selection:text-white">
       {/* Background Decorativo Superior */}
-      <div className="absolute top-0 inset-x-0 h-[650px] bg-gradient-to-b from-emerald-50/60 via-amber-50/20 to-transparent pointer-events-none -z-10" />
+      <div className="absolute top-0 inset-x-0 h-[680px] bg-gradient-to-b from-emerald-50/70 via-amber-50/20 to-transparent pointer-events-none -z-10" />
 
       {/* Floating Header */}
       <header className="sticky top-4 z-50 max-w-6xl mx-auto px-4">
-        <nav className="bg-white/80 backdrop-blur-xl border border-slate-200/70 rounded-2xl px-4 sm:px-6 py-3 flex items-center justify-between shadow-sm shadow-slate-200/50">
+        <nav className="bg-white/85 backdrop-blur-xl border border-slate-200/70 rounded-2xl px-4 sm:px-6 py-3 flex items-center justify-between shadow-sm shadow-slate-200/50">
           <Link href="/" className="flex items-center gap-2.5 group">
             <img
               src="/logo.png"
@@ -132,19 +127,18 @@ export default function LandingPage() {
             />
           </Link>
 
-          {/* Links Desktop */}
           <div className="hidden md:flex items-center gap-6 text-sm font-semibold text-slate-600">
-            <a href="#como-funciona" className="hover:text-emerald-600 transition">
-              Como Funciona
-            </a>
             <a href="#recursos" className="hover:text-emerald-600 transition">
               Recursos
+            </a>
+            <a href="#ia-whatsapp" className="hover:text-emerald-600 transition">
+              IA + WhatsApp
             </a>
             <a href="#simulador" className="hover:text-emerald-600 transition">
               Simulador
             </a>
             <a href="#precos" className="hover:text-emerald-600 transition">
-              Preço
+              Preço (5%)
             </a>
             <a href="#faq" className="hover:text-emerald-600 transition">
               FAQ
@@ -168,7 +162,7 @@ export default function LandingPage() {
         </nav>
       </header>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-12 sm:pt-20 pb-24 space-y-32">
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-12 sm:pt-20 pb-24 space-y-28 sm:space-y-32">
         {/* ========================================================================= */}
         {/* HERO SECTION                                                             */}
         {/* ========================================================================= */}
@@ -179,39 +173,36 @@ export default function LandingPage() {
             variants={staggerContainer}
             className="lg:col-span-7 space-y-6 text-center lg:text-left"
           >
-            {/* Pill Tag */}
             <motion.div variants={fadeIn} className="inline-flex items-center">
               <span className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-50 border border-emerald-200/60 text-emerald-800 text-xs font-extrabold shadow-xs">
                 <Sparkles className="w-4 h-4 text-emerald-600" />
-                Caderninho de Fiado Digital com Pix no WhatsApp
+                Vitrine Online • Fiado com Pix • Pedidos ao Vivo • Vendedor IA
               </span>
             </motion.div>
 
-            {/* Headline */}
             <motion.h1
               variants={fadeIn}
-              className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight text-slate-900 leading-[1.12]"
+              className="text-4xl sm:text-5xl lg:text-[56px] font-extrabold tracking-tight text-slate-900 leading-[1.1]"
             >
-              O fiado organizado. <br />
-              O cliente cobrado no{" "}
+              Sua loja completa com{" "}
               <span className="bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-700 bg-clip-text text-transparent">
-                WhatsApp com Pix
+                Fiado no WhatsApp, Vitrine e IA
               </span>
               .
             </motion.h1>
 
-            {/* Subtitle */}
             <motion.p
               variants={fadeIn}
               className="text-slate-600 text-lg sm:text-xl leading-relaxed max-w-2xl mx-auto lg:mx-0 font-normal"
             >
-              Diga adeus às anotações em papel que somem e à vergonha de cobrar.
-              Crie sua vitrine online, controle os limites de fiado e deixe o robô
-              cobrar no vencimento com o botão{" "}
-              <strong className="text-slate-900 font-semibold">Copiar Código Pix</strong>.
+              Venda pela sua vitrine personalizada com{" "}
+              <strong className="text-slate-900 font-semibold">frete automático por CEP</strong>,{" "}
+              cupons e fidelidade. Acompanhe pedidos ao vivo estilo iFood, deixe o{" "}
+              <strong className="text-slate-900 font-semibold">Vendedor IA</strong> atender 24h e
+              cobre o fiado no automático com{" "}
+              <strong className="text-slate-900 font-semibold">Pix direto na sua conta</strong>.
             </motion.p>
 
-            {/* CTA Buttons */}
             <motion.div
               variants={fadeIn}
               className="pt-3 flex flex-col sm:flex-row gap-4 justify-center lg:justify-start"
@@ -220,35 +211,34 @@ export default function LandingPage() {
                 href="/login"
                 className="inline-flex items-center justify-center gap-2.5 bg-gradient-to-r from-emerald-600 via-emerald-600 to-emerald-700 hover:from-emerald-500 hover:to-emerald-600 text-white px-8 py-4 rounded-2xl font-extrabold text-base shadow-xl shadow-emerald-600/30 hover:shadow-emerald-600/40 active:scale-[0.98] transition group"
               >
-                <span>Criar minha loja agora</span>
+                <span>Criar minha loja grátis</span>
                 <ArrowRight className="w-5 h-5 transition-transform group-hover:translate-x-1" />
               </Link>
 
               <a
-                href="#simulador"
+                href="#recursos"
                 className="inline-flex items-center justify-center gap-2 bg-white hover:bg-slate-50 text-slate-700 border border-slate-200 px-6 py-4 rounded-2xl font-bold text-base shadow-xs transition"
               >
-                <TrendingUp className="w-5 h-5 text-emerald-600" />
-                Simular meus ganhos
+                <Zap className="w-5 h-5 text-emerald-600" />
+                Ver tudo que o sistema faz
               </a>
             </motion.div>
 
-            {/* Micro Prova Social */}
             <motion.div
               variants={fadeIn}
               className="pt-4 flex flex-wrap items-center justify-center lg:justify-start gap-6 text-xs text-slate-500 font-medium"
             >
               <div className="flex items-center gap-1.5">
                 <Check className="w-4 h-4 text-emerald-600 font-bold" />
-                <span>Zero mensalidade</span>
+                <span>R$ 0 de mensalidade fixa</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <Check className="w-4 h-4 text-emerald-600 font-bold" />
-                <span>Sem cartão de crédito</span>
+                <span>Apenas 5% quando vender</span>
               </div>
               <div className="flex items-center gap-1.5">
                 <Check className="w-4 h-4 text-emerald-600 font-bold" />
-                <span>Pix direto na sua conta</span>
+                <span>Pix 100% direto na sua conta</span>
               </div>
             </motion.div>
           </motion.div>
@@ -260,48 +250,47 @@ export default function LandingPage() {
             transition={{ duration: 0.7, delay: 0.2 }}
             className="lg:col-span-5 relative flex justify-center"
           >
-            {/* Glow effect de fundo */}
             <div className="absolute -inset-4 bg-gradient-to-tr from-emerald-400/25 to-amber-300/20 rounded-full blur-3xl -z-10" />
 
             <div className="relative">
               <HeroVideo />
 
-              {/* Floating Badge 1: Pix Recebido */}
+              {/* Floating Badge 1: Rastreamento / Pix */}
               <motion.div
                 initial={{ opacity: 0, x: -30, y: 20 }}
                 animate={{ opacity: 1, x: 0, y: 0 }}
                 transition={{ delay: 0.8, duration: 0.6 }}
-                className="hidden sm:flex absolute -left-10 top-16 bg-white/95 backdrop-blur-md p-3.5 rounded-2xl border border-slate-100 shadow-xl items-center gap-3 z-20"
+                className="hidden sm:flex absolute -left-10 top-14 bg-white/95 backdrop-blur-md p-3.5 rounded-2xl border border-slate-100 shadow-xl items-center gap-3 z-20"
               >
-                <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold text-lg shadow-sm">
-                  ⚡
+                <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white flex items-center justify-center font-bold shadow-sm">
+                  <Bike className="w-5 h-5" />
                 </div>
                 <div>
                   <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">
-                    Pix Recebido
+                    Pedido ao Vivo
                   </p>
                   <p className="text-sm font-extrabold text-slate-900">
-                    + R$ 145,00 na conta
+                    Saiu p/ entrega • Aviso Zap
                   </p>
                 </div>
               </motion.div>
 
-              {/* Floating Badge 2: Cobrança WhatsApp */}
+              {/* Floating Badge 2: IA + Cobrança */}
               <motion.div
                 initial={{ opacity: 0, x: 30, y: -20 }}
                 animate={{ opacity: 1, x: 0, y: 0 }}
                 transition={{ delay: 1, duration: 0.6 }}
                 className="hidden sm:flex absolute -right-8 bottom-20 bg-white/95 backdrop-blur-md p-3.5 rounded-2xl border border-slate-100 shadow-xl items-center gap-3 z-20"
               >
-                <div className="w-10 h-10 rounded-xl bg-green-500 text-white flex items-center justify-center shadow-sm">
-                  <MessageCircle className="w-5 h-5" />
+                <div className="w-10 h-10 rounded-xl bg-slate-900 text-emerald-400 flex items-center justify-center shadow-sm">
+                  <Bot className="w-5 h-5" />
                 </div>
                 <div>
                   <p className="text-[11px] text-slate-400 font-semibold uppercase tracking-wider">
-                    Zap Automático
+                    IA + Régua 09h
                   </p>
                   <p className="text-sm font-extrabold text-slate-900">
-                    Cobrança enviada com Pix
+                    Venda e Pix automáticos
                   </p>
                 </div>
               </motion.div>
@@ -310,7 +299,7 @@ export default function LandingPage() {
         </section>
 
         {/* ========================================================================= */}
-        {/* LOGO STRIP / NÚMEROS DE IMPACTO                                           */}
+        {/* NUMBERS / IMPACT STRIP                                                    */}
         {/* ========================================================================= */}
         <section className="bg-gradient-to-r from-slate-900 via-slate-900 to-emerald-950 text-white rounded-3xl p-8 sm:p-12 shadow-2xl relative overflow-hidden">
           <div className="absolute top-0 right-0 w-80 h-80 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none" />
@@ -318,26 +307,26 @@ export default function LandingPage() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center divide-y md:divide-y-0 md:divide-x divide-slate-800">
             <div className="pt-4 md:pt-0">
               <p className="text-3xl sm:text-4xl font-extrabold text-emerald-400 tracking-tight">
-                98%
+                24/7
               </p>
               <p className="text-xs sm:text-sm text-slate-400 mt-1 font-medium">
-                De taxa de recebimento dos fiados
+                Vendedor IA na vitrine e no WhatsApp
               </p>
             </div>
             <div className="pt-4 md:pt-0">
               <p className="text-3xl sm:text-4xl font-extrabold text-amber-400 tracking-tight">
-                30s
+                R$ 0
               </p>
               <p className="text-xs sm:text-sm text-slate-400 mt-1 font-medium">
-                Para criar sua vitrine com sua logo
+                De mensalidade fixa ou taxa de adesão
               </p>
             </div>
             <div className="pt-4 md:pt-0">
               <p className="text-3xl sm:text-4xl font-extrabold text-emerald-400 tracking-tight">
-                0 R$
+                5%
               </p>
               <p className="text-xs sm:text-sm text-slate-400 mt-1 font-medium">
-                De custo fixo ou mensalidade
+                Apenas sobre as vendas que você fechar
               </p>
             </div>
             <div className="pt-4 md:pt-0">
@@ -345,49 +334,55 @@ export default function LandingPage() {
                 100%
               </p>
               <p className="text-xs sm:text-sm text-slate-400 mt-1 font-medium">
-                Do Pix direto na sua conta bancária
+                Do Pix direto para sua conta bancária
               </p>
             </div>
           </div>
         </section>
 
         {/* ========================================================================= */}
-        {/* BENTO GRID DE RECURSOS                                                    */}
+        {/* BENTO GRID COMPLETO DE RECURSOS                                           */}
         {/* ========================================================================= */}
         <section id="recursos" className="space-y-12">
           <div className="text-center max-w-2xl mx-auto space-y-4">
             <span className="text-xs font-extrabold uppercase tracking-widest text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200/60">
-              Tudo o que você precisa
+              Ecossistema Completo
             </span>
             <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-slate-900">
-              Feito para quem vende e quer receber sem dor de cabeça.
+              Tudo o que sua loja precisa em um só lugar.
             </h2>
             <p className="text-slate-600 text-base sm:text-lg">
-              Substitua cadernos rasurados, planilhas confusas e mensagens manuais
-              por uma plataforma profissional feita sob medida para o comércio brasileiro.
+              Do cardápio online ao fiado cobrado no automático, com Inteligência Artificial,
+              controle de estoque e acompanhamento ao vivo de cada pedido.
             </p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {/* Bento Card 1: Destaque Grande */}
-            <div className="md:col-span-2 bg-white rounded-3xl p-8 border border-slate-200/80 shadow-sm hover:shadow-md transition space-y-6 flex flex-col justify-between">
+            {/* Card 1: Caderninho + Régua Automática */}
+            <div className="md:col-span-2 bg-white rounded-3xl p-7 sm:p-8 border border-slate-200/80 shadow-sm hover:shadow-md transition space-y-6 flex flex-col justify-between">
               <div className="space-y-3">
-                <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
-                  <BookOpen className="w-6 h-6" />
+                <div className="flex items-center gap-2.5">
+                  <div className="w-11 h-11 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                    <BookOpen className="w-5 h-5" />
+                  </div>
+                  <span className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase px-2.5 py-1 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                    <BellRing className="w-3 h-3" /> Régua Automática 09h
+                  </span>
                 </div>
                 <h3 className="text-2xl font-bold text-slate-900">
-                  Caderninho Digital com Limite Inteligente
+                  Caderninho Digital com Limite & Régua de Cobrança Automática
                 </h3>
                 <p className="text-slate-600 leading-relaxed text-sm sm:text-base">
-                  Cadastre cada cliente com limite de crédito personalizado, anote compras e pagamentos parciais com cálculo de saldo em tempo real. Você nunca mais vende fiado para quem já estourou o limite.
+                  Controle saldos, limites de crédito e pagamentos parciais em tempo real. Ative a
+                  régua automática e o robô lembra antes do vencimento, no dia exato e após atraso
+                  já enviando seu Pix Copia e Cola — sem repetir mensagens no mesmo dia.
                 </p>
               </div>
 
-              {/* Preview UI do Caderninho */}
               <div className="bg-slate-50 border border-slate-200/70 rounded-2xl p-4 space-y-3">
                 <div className="flex items-center justify-between text-xs font-semibold text-slate-500">
-                  <span>Cliente</span>
-                  <span>Saldo Devedor / Limite</span>
+                  <span>Cliente • Vencimento</span>
+                  <span>Saldo / Limite</span>
                 </div>
                 <div className="bg-white p-3 rounded-xl border border-slate-100 flex items-center justify-between shadow-xs">
                   <div className="flex items-center gap-2.5">
@@ -396,84 +391,233 @@ export default function LandingPage() {
                     </div>
                     <div>
                       <p className="text-sm font-bold text-slate-900">João Silva</p>
-                      <p className="text-[11px] text-slate-400">Vence em 2 dias</p>
+                      <p className="text-[11px] text-amber-600 font-semibold">
+                        Lembrete automático agendado
+                      </p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-bold text-red-600">R$ 145,00</p>
+                    <p className="text-sm font-bold text-rose-600">R$ 145,00</p>
                     <p className="text-[11px] text-slate-400">Limite: R$ 300,00</p>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Bento Card 2: WhatsApp + Pix */}
-            <div className="bg-gradient-to-br from-emerald-600 to-emerald-800 text-white rounded-3xl p-8 shadow-sm flex flex-col justify-between space-y-6">
+            {/* Card 2: Rastreamento ao Vivo Estilo iFood */}
+            <div className="bg-gradient-to-br from-slate-900 to-slate-950 text-white rounded-3xl p-7 sm:p-8 shadow-sm flex flex-col justify-between space-y-6">
               <div className="space-y-3">
-                <div className="w-12 h-12 rounded-2xl bg-white/15 text-white flex items-center justify-center">
-                  <MessageCircle className="w-6 h-6" />
+                <div className="w-11 h-11 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+                  <Bike className="w-5 h-5" />
+                </div>
+                <h3 className="text-xl sm:text-2xl font-bold">
+                  Rastreamento de Pedido ao Vivo
+                </h3>
+                <p className="text-slate-300 text-sm leading-relaxed">
+                  Avance o status no painel com 1 clique. O cliente acompanha na tela em tempo real e
+                  recebe aviso automático no WhatsApp em cada etapa.
+                </p>
+              </div>
+
+              <div className="bg-white/5 border border-white/10 rounded-2xl p-3.5 grid grid-cols-4 gap-1 text-center">
+                {[
+                  { label: "Recebido", icon: CheckCircle2, active: true },
+                  { label: "Preparo", icon: ChefHat, active: true },
+                  { label: "A caminho", icon: Bike, active: true },
+                  { label: "Entregue", icon: ShoppingBag, active: false },
+                ].map((s) => {
+                  const Icon = s.icon;
+                  return (
+                    <div key={s.label} className="flex flex-col items-center gap-1">
+                      <div
+                        className={`w-7 h-7 rounded-full flex items-center justify-center ${
+                          s.active ? "bg-emerald-500 text-white" : "bg-white/10 text-slate-400"
+                        }`}
+                      >
+                        <Icon className="w-3.5 h-3.5" />
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-200">{s.label}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Card 3: Vendedor IA + Assistente IA */}
+            <div
+              id="ia-whatsapp"
+              className="md:col-span-2 bg-gradient-to-br from-emerald-600 to-teal-800 text-white rounded-3xl p-7 sm:p-8 shadow-sm flex flex-col justify-between space-y-6"
+            >
+              <div className="space-y-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-11 h-11 rounded-2xl bg-white/15 text-white flex items-center justify-center">
+                    <Bot className="w-5 h-5" />
+                  </div>
+                  <span className="text-[11px] font-black uppercase px-2.5 py-1 rounded-full bg-white/15 text-amber-200">
+                    IA + WhatsApp Integrados
+                  </span>
                 </div>
                 <h3 className="text-2xl font-bold">
-                  Cobrança no Zap com Pix Automático
+                  Vendedor IA para Clientes + Assistente IA para o Lojista
                 </h3>
-                <p className="text-emerald-100 text-sm leading-relaxed">
-                  Lembretes elegantes no WhatsApp com o código Pix Copia e Cola pronto para o cliente pagar com um toque no banco dele.
+                <p className="text-emerald-50 text-sm sm:text-base leading-relaxed">
+                  Na vitrine, o <strong>Vendedor IA</strong> tira dúvidas de cardápio, calcula frete
+                  pelo CEP e coloca itens direto na sacola. No WhatsApp ou no painel, você comanda
+                  sua loja por mensagem: consulte devedores, estoque baixo, pedidos abertos ou
+                  diga <em>&ldquo;anota 45 no fiado do João&rdquo;</em>.
                 </p>
               </div>
 
-              <div className="bg-emerald-950/40 rounded-2xl p-4 border border-emerald-400/20 text-xs space-y-2">
-                <p className="font-mono text-emerald-200 truncate">
-                  00020126580014br.gov.bcb.pix...
-                </p>
-                <div className="bg-emerald-500 text-white font-bold py-2 rounded-xl text-center shadow-xs">
-                  📋 Copiar código Pix
+              <div className="grid sm:grid-cols-2 gap-3 text-xs">
+                <div className="bg-black/25 border border-white/15 rounded-2xl p-3.5 space-y-1">
+                  <p className="font-extrabold text-amber-200">🛍️ Cliente na Vitrine:</p>
+                  <p className="text-emerald-50">
+                    &ldquo;Quanto fica o frete para 30130-000 e tem coca 2L?&rdquo; → IA calcula e
+                    adiciona na sacola!
+                  </p>
+                </div>
+                <div className="bg-black/25 border border-white/15 rounded-2xl p-3.5 space-y-1">
+                  <p className="font-extrabold text-emerald-300">📱 Lojista no WhatsApp:</p>
+                  <p className="text-emerald-50">
+                    &ldquo;Anota R$ 45 no fiado do João&rdquo; → Saldo atualizado e comprovante
+                    enviado na hora!
+                  </p>
                 </div>
               </div>
             </div>
 
-            {/* Bento Card 3: Vitrine Virtual Personalizada */}
-            <div className="bg-white rounded-3xl p-8 border border-slate-200/80 shadow-sm hover:shadow-md transition space-y-4">
-              <div className="w-12 h-12 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center">
-                <Palette className="w-6 h-6" />
+            {/* Card 4: Frete por CEP & Vitrine */}
+            <div className="bg-white rounded-3xl p-7 border border-slate-200/80 shadow-sm hover:shadow-md transition space-y-4 flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="w-11 h-11 rounded-2xl bg-sky-100 text-sky-700 flex items-center justify-center">
+                  <MapPin className="w-5 h-5" />
+                </div>
+                <h3 className="text-xl font-bold text-slate-900">
+                  Vitrine Própria & Frete por CEP
+                </h3>
+                <p className="text-slate-600 text-sm leading-relaxed">
+                  Link exclusivo com sua logo e cores, fotos otimizadas, bairros atendidos, faixas de
+                  CEP automáticas via ViaCEP, botão Aberto/Fechado e retirada no balcão.
+                </p>
+              </div>
+              <div className="text-[11px] font-bold text-sky-700 bg-sky-50 border border-sky-200/70 rounded-xl px-3 py-2">
+                ✓ Área do cliente com login por celular e senha
+              </div>
+            </div>
+
+            {/* Card 5: Encomendas Programadas */}
+            <div className="bg-white rounded-3xl p-7 border border-slate-200/80 shadow-sm hover:shadow-md transition space-y-4">
+              <div className="w-11 h-11 rounded-2xl bg-amber-100 text-amber-700 flex items-center justify-center">
+                <CalendarClock className="w-5 h-5" />
               </div>
               <h3 className="text-xl font-bold text-slate-900">
-                Sua Marca & Fotos em Alta Resolução
+                Encomendas Programadas
               </h3>
               <p className="text-slate-600 text-sm leading-relaxed">
-                Suba fotos de produtos e logotipo da sua loja com processamento em nuvem em alta resolução e carregamento instantâneo.
+                Registre pedidos sob encomenda com data de entrega e data combinada de pagamento,
+                com status (Pendente, Atrasada, Paga) e disparo automático de cobrança no Zap.
               </p>
             </div>
 
-            {/* Bento Card 4: Pedidos no WhatsApp */}
-            <div className="bg-white rounded-3xl p-8 border border-slate-200/80 shadow-sm hover:shadow-md transition space-y-4">
-              <div className="w-12 h-12 rounded-2xl bg-blue-100 text-blue-700 flex items-center justify-center">
-                <ShoppingBag className="w-6 h-6" />
+            {/* Card 6: Cupons e Cartão Fidelidade */}
+            <div className="bg-white rounded-3xl p-7 border border-slate-200/80 shadow-sm hover:shadow-md transition space-y-4">
+              <div className="w-11 h-11 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center">
+                <Tag className="w-5 h-5" />
               </div>
               <h3 className="text-xl font-bold text-slate-900">
-                Sacola de Compras Sem Fricção
+                Cupons & Cartão Fidelidade
               </h3>
               <p className="text-slate-600 text-sm leading-relaxed">
-                O cliente monta a sacola na sua vitrine e o pedido chega pronto no seu WhatsApp com endereço e forma de pagamento.
+                Crie cupons em % ou R$ com pedido mínimo e ative carimbos digitais pelo celular do
+                cliente (ex.: complete 10 pedidos e ganhe R$ 15 de desconto automático).
               </p>
+              <div className="flex items-center gap-2 text-[11px] font-extrabold text-amber-700 bg-amber-50 border border-amber-200/70 rounded-xl px-3 py-2">
+                <Award className="w-4 h-4 shrink-0" />
+                <span>Fidelidade: 8/10 carimbos acumulados</span>
+              </div>
             </div>
 
-            {/* Bento Card 5: Zero Mensalidade */}
-            <div className="bg-white rounded-3xl p-8 border border-slate-200/80 shadow-sm hover:shadow-md transition space-y-4">
-              <div className="w-12 h-12 rounded-2xl bg-purple-100 text-purple-700 flex items-center justify-center">
-                <ShieldCheck className="w-6 h-6" />
+            {/* Card 7: Relatórios + Estoque Baixo */}
+            <div className="bg-white rounded-3xl p-7 border border-slate-200/80 shadow-sm hover:shadow-md transition space-y-4">
+              <div className="w-11 h-11 rounded-2xl bg-rose-100 text-rose-700 flex items-center justify-center">
+                <BarChart3 className="w-5 h-5" />
               </div>
               <h3 className="text-xl font-bold text-slate-900">
-                Risco Zero: Só pague se vender
+                Relatórios & Alerta de Estoque
               </h3>
               <p className="text-slate-600 text-sm leading-relaxed">
-                Sem mensalidade fixa, sem taxa de adesão e sem surpresas. A plataforma só ganha uma pequena comissão se você faturar.
+                Gráfico de vendas dos últimos 7 dias, ranking de produtos e clientes, reposição
+                rápida (+5 / +10 un), baixa automática nas vendas e exportação em Excel (CSV).
               </p>
+              <div className="flex items-center gap-2 text-[11px] font-extrabold text-rose-700 bg-rose-50 border border-rose-200/70 rounded-xl px-3 py-2">
+                <AlertTriangle className="w-4 h-4 shrink-0" />
+                <span>Alerta automático quando estoque ≤ 3 un</span>
+              </div>
             </div>
           </div>
         </section>
 
         {/* ========================================================================= */}
-        {/* SIMULADOR DE GANHOS E RECUPERAÇÃO                                         */}
+        {/* DOIS LADOS CONECTADOS: LOJISTA X CLIENTE                                  */}
+        {/* ========================================================================= */}
+        <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white rounded-3xl p-7 sm:p-8 border border-slate-200/80 shadow-sm space-y-4">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase px-3 py-1 rounded-full bg-slate-900 text-white">
+              Painel do Lojista (/admin)
+            </span>
+            <h3 className="text-2xl font-extrabold text-slate-900">
+              Gestão completa na palma da mão
+            </h3>
+            <ul className="space-y-2.5 text-sm text-slate-600 font-medium">
+              <li className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                Fila de pedidos ao vivo com avanço de etapa e aviso automático no WhatsApp
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                Fiado completo, encomendas agendadas e régua automática de cobrança
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                Copiloto IA no painel e via WhatsApp para lançar vendas e consultar dados
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                Relatórios, ranking de produtos, cupons, fidelidade e estoque baixo
+              </li>
+            </ul>
+          </div>
+
+          <div className="bg-white rounded-3xl p-7 sm:p-8 border border-emerald-200 shadow-sm space-y-4">
+            <span className="inline-flex items-center gap-1.5 text-[11px] font-black uppercase px-3 py-1 rounded-full bg-emerald-600 text-white">
+              Vitrine do Cliente (/sua-loja)
+            </span>
+            <h3 className="text-2xl font-extrabold text-slate-900">
+              Compra rápida, sem baixar aplicativo
+            </h3>
+            <ul className="space-y-2.5 text-sm text-slate-600 font-medium">
+              <li className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                Cardápio com busca, destaques, modo escuro/claro e cálculo de frete por CEP
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                Vendedor IA que tira dúvidas de preços/entrega e monta a sacola na conversa
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                Acompanhamento de pedido em tempo real + cartão fidelidade e cupons no checkout
+              </li>
+              <li className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                Confirmação instantânea no WhatsApp com botão &ldquo;Copiar código Pix&rdquo;
+              </li>
+            </ul>
+          </div>
+        </section>
+
+        {/* ========================================================================= */}
+        {/* SIMULADOR DE GANHOS E RECUPERAÇÃO (5%)                                   */}
         {/* ========================================================================= */}
         <section
           id="simulador"
@@ -487,14 +631,14 @@ export default function LandingPage() {
               Quanto o meufiadim recupera para você?
             </h2>
             <p className="text-slate-500 text-sm sm:text-base mt-1">
-              Arraste a barra para indicar o quanto você costuma vender no fiado por mês:
+              Arraste a barra para indicar o quanto você costuma vender no fiado e vitrine por mês:
             </p>
           </div>
 
           <div className="space-y-6 max-w-3xl">
             <div className="flex items-center justify-between">
               <span className="text-sm font-bold text-slate-600">
-                Valor médio de fiado por mês:
+                Volume médio de vendas / fiado por mês:
               </span>
               <span className="text-2xl sm:text-3xl font-extrabold text-emerald-600">
                 R$ {fiadoMensal.toLocaleString("pt-BR")}
@@ -518,17 +662,16 @@ export default function LandingPage() {
             </div>
           </div>
 
-          {/* Resultados da simulação */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-4">
             <div className="bg-emerald-50/70 border border-emerald-200/60 rounded-2xl p-5 space-y-1">
               <p className="text-xs text-emerald-800 font-bold uppercase">
-                Recebimento Garantido no Prazo
+                Recebimento Estimado no Prazo
               </p>
               <p className="text-2xl sm:text-3xl font-extrabold text-emerald-700">
                 R$ {recuperacaoEstimada.toLocaleString("pt-BR")}
               </p>
               <p className="text-[11px] text-emerald-600">
-                Evite o calote com o botão de Pix no WhatsApp
+                Régua automática + botão de Pix no WhatsApp
               </p>
             </div>
 
@@ -540,19 +683,19 @@ export default function LandingPage() {
                 ~{horasEconomizadas} horas/mês
               </p>
               <p className="text-[11px] text-slate-500">
-                Sem precisar mandar mensagem um por um
+                Sem cobrar cliente um por um nem anotar em papel
               </p>
             </div>
 
             <div className="bg-slate-50 border border-slate-200/70 rounded-2xl p-5 space-y-1">
               <p className="text-xs text-slate-600 font-bold uppercase">
-                Taxa da Plataforma (10%)
+                Comissão da Plataforma (5%)
               </p>
               <p className="text-2xl sm:text-3xl font-extrabold text-slate-900">
                 R$ {taxaPlataforma.toLocaleString("pt-BR")}
               </p>
               <p className="text-[11px] text-slate-500">
-                Apenas sobre as vendas que derem certo
+                R$ 0 de mensalidade fixa — só sobre vendas reais
               </p>
             </div>
           </div>
@@ -564,7 +707,7 @@ export default function LandingPage() {
         <section id="como-funciona" className="space-y-8">
           <div className="text-center max-w-2xl mx-auto space-y-3">
             <span className="text-xs font-extrabold uppercase tracking-widest text-emerald-700 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200/60">
-              Feito para o seu tipo de negócio
+              Feito para o seu negócio
             </span>
             <h2 className="text-3xl font-extrabold tracking-tight text-slate-900">
               Quem mais se beneficia do meufiadim?
@@ -604,10 +747,11 @@ export default function LandingPage() {
         <section className="bg-slate-900 text-white rounded-3xl p-8 sm:p-14 space-y-12 shadow-xl">
           <div className="text-center max-w-xl mx-auto space-y-3">
             <h2 className="text-3xl font-extrabold tracking-tight text-white">
-              Comece a cobrar no automático em 3 passos
+              Sua loja online e no piloto automático em 3 passos
             </h2>
             <p className="text-slate-400 text-sm sm:text-base">
-              Você não precisa ser técnico. Em menos de 2 minutos sua loja já está pronta.
+              Você não precisa ser técnico. Em menos de 2 minutos sua vitrine, seu fiado e seu
+              atendente IA já estão prontos.
             </p>
           </div>
 
@@ -616,12 +760,16 @@ export default function LandingPage() {
               <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white font-extrabold flex items-center justify-center text-lg">
                 1
               </div>
-              <h3 className="font-bold text-lg text-white">Crie sua Loja</h3>
+              <h3 className="font-bold text-lg text-white">Crie sua Loja e Vitrine</h3>
               <p className="text-sm text-slate-400 leading-relaxed">
-                Cadastre seu e-mail e nome da loja. Você ganha na hora um link exclusivo como{" "}
-                <code suppressHydrationWarning>
-                  {typeof window !== "undefined" ? window.location.host : "meufiadimdigital.vercel.app"}/sua-loja
-                </code>.
+                Cadastre sua loja, suba logo e produtos e receba na hora o link exclusivo{" "}
+                <code suppressHydrationWarning className="text-emerald-300">
+                  {typeof window !== "undefined"
+                    ? window.location.host
+                    : "meufiadimdigital.vercel.app"}
+                  /sua-loja
+                </code>
+                .
               </p>
             </div>
 
@@ -629,9 +777,10 @@ export default function LandingPage() {
               <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white font-extrabold flex items-center justify-center text-lg">
                 2
               </div>
-              <h3 className="font-bold text-lg text-white">Anote os Fiados</h3>
+              <h3 className="font-bold text-lg text-white">Venda, Encomende ou Anote</h3>
               <p className="text-sm text-slate-400 leading-relaxed">
-                Adicione seus clientes, defina o limite de crédito e lance compras e pagamentos parciais com facilidade.
+                Receba pedidos pela vitrine com frete por CEP, ative cupons/fidelidade e anote
+                fiados ou encomendas direto pelo painel ou WhatsApp com IA.
               </p>
             </div>
 
@@ -639,16 +788,17 @@ export default function LandingPage() {
               <div className="w-10 h-10 rounded-xl bg-emerald-500 text-white font-extrabold flex items-center justify-center text-lg">
                 3
               </div>
-              <h3 className="font-bold text-lg text-white">Receba no Pix</h3>
+              <h3 className="font-bold text-lg text-white">Acompanhe e Receba no Pix</h3>
               <p className="text-sm text-slate-400 leading-relaxed">
-                No dia combinado, nosso robô manda a cobrança no WhatsApp com o código Pix direto para sua conta bancária.
+                Avance etapas do pedido ao vivo, acompanhe relatórios de lucro/estoque e deixe a
+                régua automática cobrar no WhatsApp direto na sua chave Pix.
               </p>
             </div>
           </div>
         </section>
 
         {/* ========================================================================= */}
-        {/* PREÇO TRANSPARENTE                                                        */}
+        {/* PREÇO TRANSPARENTE (5%)                                                   */}
         {/* ========================================================================= */}
         <section id="precos" className="max-w-3xl mx-auto text-center space-y-8">
           <div className="space-y-3">
@@ -659,64 +809,49 @@ export default function LandingPage() {
               Sem mensalidade. Só pague quando vender.
             </h2>
             <p className="text-slate-600 text-base max-w-xl mx-auto">
-              Acreditamos que o pequeno comerciante não deve ter custos fixos para modernizar suas vendas.
+              Todos os recursos liberados desde o primeiro dia sem custo fixo mensal.
             </p>
           </div>
 
           <div className="group bg-white rounded-[36px] p-8 sm:p-10 border-2 border-emerald-500 shadow-2xl shadow-emerald-500/10 relative overflow-hidden text-left space-y-6 transition-all duration-200 hover:shadow-emerald-500/20">
             <div className="absolute top-0 right-0 bg-gradient-to-l from-emerald-600 to-emerald-700 text-white text-xs font-extrabold uppercase px-6 py-2 rounded-bl-3xl shadow-sm">
-              Plano Único
+              Plano Único Completo
             </div>
 
             <div>
               <p className="text-xs font-extrabold text-slate-400 uppercase tracking-wider">
-                Acesso Ilimitado
+                Acesso Completo Liberado
               </p>
               <div className="flex items-baseline gap-2 mt-1">
                 <span className="text-5xl sm:text-6xl font-extrabold text-slate-900 tracking-tight">
                   R$ 0
                 </span>
-                <span className="text-slate-500 font-bold text-base">
-                  / mensalidade fixa
-                </span>
+                <span className="text-slate-500 font-bold text-base">/ mensalidade fixa</span>
               </div>
               <p className="text-sm text-emerald-700 font-extrabold mt-1.5 flex items-center gap-1.5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500" />
-                Apenas 10% sobre as vendas que você registrar e receber
+                Apenas 5% sobre as vendas registradas na plataforma
               </p>
             </div>
 
-            <div className="space-y-3.5 pt-4 border-t border-slate-100 text-sm font-semibold text-slate-700">
-              <div className="flex items-center gap-3">
-                <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+            <div className="grid sm:grid-cols-2 gap-3.5 pt-4 border-t border-slate-100 text-sm font-semibold text-slate-700">
+              {[
+                "Vitrine virtual personalizada + área do cliente",
+                "Cálculo de frete por CEP (ViaCEP) e bairros",
+                "Rastreamento de pedido ao vivo + aviso Zap",
+                "Vendedor IA 24h na vitrine e no WhatsApp",
+                "Caderninho de fiado + Régua de cobrança 09h",
+                "Encomendas agendadas com baixa integrada",
+                "Cupons de desconto + Cartão Fidelidade",
+                "Relatórios, alerta de estoque baixo e PWA",
+              ].map((feat) => (
+                <div key={feat} className="flex items-center gap-2.5">
+                  <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                    <Check className="w-3.5 h-3.5 stroke-[2.5]" />
+                  </div>
+                  <span>{feat}</span>
                 </div>
-                <span>Vitrine virtual com link personalizado e logo oficial</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                </div>
-                <span>Caderninho de fiado com limites e saldos ilimitados</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                </div>
-                <span>Upload de fotos ultrarrápido com carregamento instantâneo</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                </div>
-                <span>Cobrança automática no WhatsApp com botão Copiar Pix</span>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
-                  <Check className="w-3.5 h-3.5 stroke-[2.5]" />
-                </div>
-                <span>Instalável no celular como aplicativo nativo (PWA)</span>
-              </div>
+              ))}
             </div>
 
             <div className="pt-2">
@@ -784,7 +919,7 @@ export default function LandingPage() {
         </section>
 
         {/* ========================================================================= */}
-        {/* FINAL CTA COM DEGRADÊ EMERALD & MASCOTE                                   */}
+        {/* FINAL CTA                                                                 */}
         {/* ========================================================================= */}
         <section className="bg-gradient-to-br from-emerald-600 via-emerald-700 to-teal-800 text-white rounded-[36px] p-8 sm:p-14 text-center space-y-6 shadow-2xl shadow-emerald-700/25 relative overflow-hidden">
           <div className="max-w-2xl mx-auto space-y-5">
@@ -798,11 +933,11 @@ export default function LandingPage() {
               </div>
             </div>
             <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-white leading-tight">
-              Pronto para modernizar suas vendas e nunca mais tomar calote?
+              Pronto para vender mais pela vitrine e receber seu fiado sem dor de cabeça?
             </h2>
             <p className="text-emerald-100 text-base sm:text-lg font-normal">
-              Junte-se a centenas de comerciantes que já aposentaram o caderninho de papel.
-              Crie sua loja grátis agora mesmo.
+              Crie sua loja em menos de 2 minutos com R$ 0 de mensalidade, IA integrada e Pix direto
+              na sua conta.
             </p>
             <div className="pt-3 flex flex-col sm:flex-row gap-4 justify-center">
               <Link
@@ -817,14 +952,16 @@ export default function LandingPage() {
         </section>
       </main>
 
-      {/* Mobile Sticky Quick Action Bar (Dock inferior móvel para smartphones) */}
+      {/* Mobile Sticky Quick Action Bar */}
       <div className="sm:hidden fixed bottom-3 inset-x-3 z-30">
         <div className="bg-slate-900/95 backdrop-blur-xl border border-slate-800 text-white px-4 py-3 rounded-[24px] shadow-2xl shadow-black/40 flex items-center justify-between gap-3">
           <div className="flex items-center gap-2.5 min-w-0">
             <img src="/logo.png" alt="meufiadim" className="h-7 w-auto object-contain shrink-0" />
             <div className="min-w-0">
               <p className="text-xs font-extrabold text-white truncate">meufiadim</p>
-              <p className="text-[10px] text-emerald-400 font-semibold truncate">R$ 0 mensalidade</p>
+              <p className="text-[10px] text-emerald-400 font-semibold truncate">
+                R$ 0 mensalidade • IA 24h
+              </p>
             </div>
           </div>
           <Link
@@ -837,7 +974,7 @@ export default function LandingPage() {
       </div>
 
       {/* Footer */}
-      <footer className="border-t border-slate-200/80 bg-white py-12 px-5">
+      <footer className="border-t border-slate-200/80 bg-white py-12 px-5 pb-24 sm:pb-12">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-6">
           <div className="flex items-center gap-3">
             <img src="/logo.png" alt="meufiadim" className="h-8 w-auto object-contain" />
@@ -847,10 +984,21 @@ export default function LandingPage() {
           </div>
 
           <div className="flex items-center gap-6 text-xs text-slate-500 font-semibold">
-            <a href="#como-funciona" className="hover:text-emerald-600">Como Funciona</a>
-            <a href="#simulador" className="hover:text-emerald-600">Simulador</a>
-            <a href="#precos" className="hover:text-emerald-600">Preços</a>
-            <Link href="/login" className="hover:text-emerald-600">Entrar</Link>
+            <a href="#recursos" className="hover:text-emerald-600">
+              Recursos
+            </a>
+            <a href="#ia-whatsapp" className="hover:text-emerald-600">
+              IA + WhatsApp
+            </a>
+            <a href="#simulador" className="hover:text-emerald-600">
+              Simulador
+            </a>
+            <a href="#precos" className="hover:text-emerald-600">
+              Preços
+            </a>
+            <Link href="/login" className="hover:text-emerald-600">
+              Entrar
+            </Link>
           </div>
         </div>
       </footer>
