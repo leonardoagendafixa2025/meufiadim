@@ -87,6 +87,10 @@ export async function GET() {
       description:
         "Servidor MCP oficial do MEU FIADIM para Copiloto Financeiro do Lojista e Vendedor IA.",
     },
+    aiEngine: {
+      geminiConfigured: Boolean((process.env.GEMINI_API_KEY || "").trim()),
+      openaiConfigured: Boolean((process.env.OPENAI_API_KEY || "").trim()),
+    },
     merchantTools: getToolsForRole("merchant").map((t) => ({
       name: t.name,
       description: t.description,

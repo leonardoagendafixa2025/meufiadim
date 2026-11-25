@@ -23,6 +23,7 @@ export interface AgentRunResult {
   toolsUsed: string[];
   cartActions: CartAction[];
   provider: "gemini" | "openai" | "local-mcp";
+  aiDiagnostic?: "active" | "missing_key" | "api_error";
 }
 
 function buildSystemPrompt(ctx: MCPToolContext, storeName?: string): string {
@@ -91,12 +92,13 @@ export function toGeminiDeclarations(tools: ReturnType<typeof getToolsForRole>) 
 
 async function runWithGemini(params: {
   apiKey: string;
+  model?: string;
   message: string;
   history: ChatTurn[];
   ctx: MCPToolContext;
   storeName?: string;
 }): Promise<AgentRunResult> {
-  const { apiKey, message, history, ctx, storeName } = params;
+  const { apiKey, model = "gemini-2.5-flash", message, history, ctx, storeName } = params;
   const tools = getToolsForRole(ctx.role);
   const toolsUsed: string[] = [];
   const cartActions: CartAction[] = [];
@@ -107,7 +109,7 @@ async function runWithGemini(params: {
   }));
   contents.push({ role: "user", parts: [{ text: message }] });
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${encodeURIComponent(
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(
     apiKey
   )}`;
 
@@ -123,7 +125,7 @@ async function runWithGemini(params: {
         tools: [{ functionDeclarations: toGeminiDeclarations(tools) }],
         generationConfig: {
           temperature: 0.35,
-          maxOutputTokens: 800,
+          maxOutputTokens: 1500,
         },
       }),
     });
@@ -487,33 +489,46 @@ export async function runAiAgent(params: {
   const geminiKey = (process.env.GEMINI_API_KEY || "").trim();
   const openAiKey = (process.env.OPENAI_API_KEY || "").trim();
 
+  let hadApiError = false;
+
   if (geminiKey) {
-    try {
-      return await runWithGemini({
-        apiKey: geminiKey,
-        message,
-        history,
-        ctx,
-        storeName,
-      });
-    } catch (err) {
-      console.warn("⚠️ Falha na chamada Gemini API, usando fallback MCP:", err);
+    for (const model of ["gemini-2.5-flash", "gemini-2.0-flash"]) {
+      try {
+        const res = await runWithGemini({
+          apiKey: geminiKey,
+          model,
+          message,
+          history,
+          ctx,
+          storeName,
+        });
+        return { ...res, aiDiagnostic: "active" };
+      } catch (err) {
+        hadApiError = true;
+        console.warn(`⚠️ Falha na chamada Gemini API (${model}), tentando próximo:`, err);
+      }
     }
   }
 
   if (openAiKey) {
     try {
-      return await runWithOpenAI({
+      const res = await runWithOpenAI({
         apiKey: openAiKey,
         message,
         history,
         ctx,
         storeName,
       });
+      return { ...res, aiDiagnostic: "active" };
     } catch (err) {
+      hadApiError = true;
       console.warn("⚠️ Falha na chamada OpenAI API, usando fallback MCP:", err);
     }
   }
 
-  return await runLocalMcpFallback({ message, ctx, storeName });
+  const fallback = await runLocalMcpFallback({ message, ctx, storeName });
+  return {
+    ...fallback,
+    aiDiagnostic: hadApiError ? "api_error" : "missing_key",
+  };
 }
